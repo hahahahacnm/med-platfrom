@@ -96,8 +96,8 @@ const handleLogout = () => {
     </header>
 
     <!-- Mobile Drawer -->
-    <n-drawer v-model:show="isMobileMenuOpen" placement="right" width="260">
-      <n-drawer-content title="菜单" closable>
+    <n-drawer v-model:show="isMobileMenuOpen" placement="right" width="280">
+      <n-drawer-content title="菜单" closable body-content-style="padding: 0;">
         <nav class="mobile-nav-menu">
            <div 
             v-for="item in menuItems" 
@@ -109,11 +109,25 @@ const handleLogout = () => {
             <n-icon size="20" class="nav-icon"><component :is="item.icon" /></n-icon>
             <span class="nav-label">{{ item.label }}</span>
           </div>
-          <div class="nav-item mobile-item logout-item" @click="handleLogout">
-             <n-icon size="20" class="nav-icon"><LogOutOutline /></n-icon>
-             <span class="nav-label">退出登录</span>
-          </div>
         </nav>
+        
+        <template #footer>
+            <div class="mobile-drawer-footer">
+                <div class="user-profile-area mobile-profile-card" @click="handleNavigate('/profile')">
+                    <div class="avatar-wrapper">
+                    <n-avatar round size="medium" :src="userAvatar" fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg" />
+                    </div>
+                    <div class="user-info">
+                    <div class="user-name">{{ userStore.username || '同学' }}</div>
+                    <div class="user-role">点击查看个人中心</div>
+                    </div>
+                </div>
+                 <div class="nav-item mobile-item logout-item" @click="handleLogout">
+                    <n-icon size="20" class="nav-icon"><LogOutOutline /></n-icon>
+                    <span class="nav-label">退出登录</span>
+                </div>
+            </div>
+        </template>
       </n-drawer-content>
     </n-drawer>
 
@@ -299,6 +313,20 @@ const handleLogout = () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 16px;
+}
+
+.mobile-drawer-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.mobile-profile-card {
+    margin: 0 0 12px 0;
+    border: 1px solid #f1f5f9;
+    background: #f8fafc;
 }
 
 .mobile-item {
