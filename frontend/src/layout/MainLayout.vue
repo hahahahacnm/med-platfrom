@@ -318,7 +318,7 @@ const handleLogout = () => {
   flex: 1;
   margin-left: 250px;
   width: calc(100% - 250px);
-  padding: 24px;
+  padding: 0; /* Removed default padding for edge-to-edge design */
   height: 100vh;
   overflow-y: auto; 
   position: relative;

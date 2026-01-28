@@ -337,9 +337,10 @@ onMounted(() => { fetchStats() })
     --text-sub: #64748b;
     --radius-box: 16px;
     --radius-item: 12px;
-    max-width: 1200px; 
+    width: 100%; 
+    box-sizing: border-box; /* Prevent padding from causing overflow */
     margin: 0 auto; 
-    padding: 0 16px 40px 16px; 
+    padding: 24px 24px 40px 24px; 
 }
 
 @keyframes slideInUp {
@@ -436,11 +437,11 @@ onMounted(() => { fetchStats() })
 /* 2. Main Grid Layout */
 .main-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr; 
+    grid-template-columns: 1fr 360px; /* Fixed width for sidebar, fluid for main */
     gap: 24px;
     align-items: start;
 }
-.main-column { display: flex; flex-direction: column; gap: 24px; }
+.main-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; /* Prevent flex overflow */ }
 .side-column { display: flex; flex-direction: column; gap: 24px; }
 
 /* 3. Panel Cards */
