@@ -33,4 +33,21 @@
 - [x] 重构 `src/views/Mistakes.vue`
 - [x] 重构 `src/views/Favorites.vue`
 - [x] 重构 `src/views/MyNotes.vue`
-- [ ] 优化 `src/views/personal/Profile.vue`
+- [x] 优化 `src/views/personal/Profile.vue`
+
+## 仪表盘优化 (当前任务)
+- [x] 全局样式优化 (`style.css`): 引入现代化字体与配色变量。
+- [x] 仪表盘重构 (`Dashboard.vue`):
+    - [x] 头部欢迎区: 增加玻璃拟态效果与更加友好的问候。
+    - [x] 统计卡片: 优化视觉层次，增加图标与趋势指示。
+    - [x] 学习强度图 (Heatmap): 优化配色与交互提示 (Tooltip)。
+    - [x] 学科透视: 改进折叠面板样式与进度条视觉。
+    - [x] 快捷入口: 设计为更加显眼的功能入口卡片。
+    - [x] 卷王榜: 优化列表展示样式。
+- [x] 由于用户要求，将仪表盘改为统一的蓝色主题，减少杂色。
+- [x] 统一全局圆角为 16px (卡片) 和 12px (内部元素)。
+- [x] 二次迭代优化:
+    - [x] 深度适配移动端 (响应式 Grid, Banner 布局调整)。
+    - [x] 增加页面入场 staggered 动画。
+    - [x] 优化卡片色彩与阴影质感。
+

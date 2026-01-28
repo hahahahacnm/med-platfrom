@@ -342,7 +342,7 @@ const handleLogout = () => {
   .main-content {
     margin-left: 0;
     width: 100%;
-    padding-top: 80px; /* Header height + gap */
+    padding: 80px 16px 24px 16px; /* Reduced side padding from 24px to 16px */
   }
 }
 
