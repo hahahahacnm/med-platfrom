@@ -188,115 +188,147 @@ onMounted(() => { fetchBanks() })
 </script>
 
 <template>
-  <div class="my-notes-container">
-    <n-layout style="height: 100vh;">
+  <div class="notes-container">
+    <div class="page-control-bar">
+      <div class="left-controls">
+        <h2 class="page-title">
+          <n-icon color="#18a058" style="margin-right: 8px; vertical-align: bottom;"><JournalOutline /></n-icon>
+          我的笔记本
+        </h2>
+        <div class="bank-selector">
+          <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
+        </div>
+      </div>
       
-      <n-layout-header bordered style="padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; height: 64px;">
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <n-button quaternary circle @click="goBack"><template #icon><n-icon><MenuOutline /></n-icon></template></n-button>
-          
-          <div style="font-size: 18px; font-weight: bold; color: #18a058; display: flex; align-items: center; gap: 8px;">
-            <n-icon><JournalOutline /></n-icon> 我的笔记本
-          </div>
-          
-          <n-select 
-            v-model:value="filter.source" 
-            :options="bankOptions" 
-            placeholder="选择题库" 
-            @update:value="handleSourceChange" 
-            style="width: 180px" 
-            size="small" 
+      <div class="right-controls">
+         <!-- Add search or filters here if needed later -->
+      </div>
+    </div>
+
+    <n-layout has-sider class="main-layout-area">
+      <n-layout-sider 
+        bordered 
+        collapse-mode="width" 
+        :collapsed-width="0" 
+        :width="260" 
+        show-trigger="arrow-circle" 
+        content-style="padding: 12px;" 
+        style="background-color: #fafafa;"
+      >
+        <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+          <n-icon color="#18a058"><FilterOutline /></n-icon> 笔记分布
+        </div>
+        
+        <n-spin :show="loadingTree">
+          <n-tree
+            block-line 
+            expand-on-click 
+            :data="noteTree" 
+            key-field="key" 
+            label-field="label" 
+            selectable
+            remote
+            :on-load="handleLoad" 
+            @update:selected-keys="handleNodeClick"
+            style="font-size: 13px;"
           />
-        </div>
-        
-        <div class="nav-links">
-             <n-button text @click="$router.push('/home')"><template #icon><n-icon><LibraryOutline /></n-icon></template>题库</n-button>
-             <n-button text @click="$router.push('/mistakes')"><template #icon><n-icon><BookOutline /></n-icon></template>错题</n-button>
-             <n-button text @click="$router.push('/favorites')"><template #icon><n-icon><StarOutline /></n-icon></template>收藏</n-button>
-        </div>
-      </n-layout-header>
-
-      <n-layout has-sider position="absolute" style="top: 64px; bottom: 0;">
-        
-        <n-layout-sider bordered collapse-mode="width" :collapsed-width="0" :width="260" show-trigger="arrow-circle" content-style="padding: 12px;" style="background-color: #fafafa;">
-          <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
-            <n-icon color="#18a058"><FilterOutline /></n-icon> 笔记分布
+          <div v-if="noteTree.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 12px;">
+            暂无笔记记录
           </div>
-          
-          <n-spin :show="loadingTree">
-            <n-tree
-              block-line 
-              expand-on-click 
-              :data="noteTree" 
-              key-field="key" 
-              label-field="label" 
-              selectable
-              remote
-              :on-load="handleLoad" 
-              @update:selected-keys="handleNodeClick"
-              style="font-size: 13px;"
-            />
-            <div v-if="noteTree.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 12px;">
-              暂无笔记记录
-            </div>
-          </n-spin>
-        </n-layout-sider>
+        </n-spin>
+      </n-layout-sider>
 
-        <n-layout-content content-style="padding: 24px; max-width: 960px; margin: 0 auto;" :native-scrollbar="true">
-          
-          <div v-if="filter.category" style="margin-bottom: 16px;">
-             <n-tag closable type="success" @close="filter.category = ''; fetchData()">
-               正在筛选: {{ findLabelInTree(noteTree, filter.category) || '当前章节' }}
-             </n-tag>
-          </div>
+      <n-layout-content content-style="padding: 24px; max-width: 960px; margin: 0 auto;" :native-scrollbar="true">
+        
+        <div v-if="filter.category" style="margin-bottom: 16px;">
+            <n-tag closable type="success" @close="filter.category = ''; fetchData()">
+              正在筛选: {{ findLabelInTree(noteTree, filter.category) || '当前章节' }}
+            </n-tag>
+        </div>
 
-          <n-spin :show="loading">
-            <div v-if="list.length > 0">
-              <div v-for="(q, index) in list" :key="q.id" class="note-item-wrapper">
-                
-                <div class="note-toolbar">
-                  <div class="info-badges">
-                    <n-tag type="success" size="small" :bordered="false" style="margin-right: 8px;">
-                      记录 #{{ (pagination.page - 1) * pagination.pageSize + index + 1 }}
-                    </n-tag>
-                    <span style="font-size: 12px; color: #999;">
-                        {{ q.source }} / {{ q.category_path || '未知章节' }}
-                    </span>
-                  </div>
-                </div>
-
-                <QuestionCard 
-                  :question="q" 
-                  :serial-number="(pagination.page - 1) * pagination.pageSize + index + 1"
-                  :init-show-notes="true" 
-                />
-
-              </div>
+        <n-spin :show="loading">
+          <div v-if="list.length > 0">
+            <div v-for="(q, index) in list" :key="q.id" class="note-item-wrapper">
               
-              <div style="display: flex; justify-content: center; margin: 40px 0;">
-                 <n-pagination
-                   v-model:page="pagination.page"
-                   :item-count="pagination.itemCount"
-                   :page-size="pagination.pageSize"
-                   @update:page="handlePageChange"
-                 />
+              <div class="note-toolbar">
+                <div class="info-badges">
+                  <n-tag type="success" size="small" :bordered="false" style="margin-right: 8px;">
+                    记录 #{{ (pagination.page - 1) * pagination.pageSize + index + 1 }}
+                  </n-tag>
+                  <span style="font-size: 12px; color: #999;">
+                      {{ q.source }} / {{ q.category_path || '未知章节' }}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <n-empty v-else-if="!loading" description="该题库下暂无笔记，去刷题吧！" style="margin-top: 100px">
-              <template #extra>
-                <n-button type="primary" @click="router.push('/home')">去刷题</n-button>
-              </template>
-            </n-empty>
-          </n-spin>
-        </n-layout-content>
-      </n-layout>
+              <QuestionCard 
+                :question="q" 
+                :serial-number="(pagination.page - 1) * pagination.pageSize + index + 1"
+                :init-show-notes="true" 
+              />
+
+            </div>
+            
+            <div style="display: flex; justify-content: center; margin: 40px 0;">
+                <n-pagination
+                  v-model:page="pagination.page"
+                  :item-count="pagination.itemCount"
+                  :page-size="pagination.pageSize"
+                  @update:page="handlePageChange"
+                />
+            </div>
+          </div>
+
+          <n-empty v-else-if="!loading" description="该题库下暂无笔记，去刷题吧！" style="margin-top: 100px">
+            <template #extra>
+              <n-button type="primary" @click="router.push('/home')">去刷题</n-button>
+            </template>
+          </n-empty>
+        </n-spin>
+      </n-layout-content>
     </n-layout>
   </div>
 </template>
 
 <style scoped>
-.nav-links { display: flex; gap: 16px; }
+.notes-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+}
+
+.page-control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background-color: #fff;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.left-controls, .right-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.bank-selector { width: 150px; }
+.main-layout-area { flex: 1; overflow: hidden; }
+
 .note-item-wrapper { margin-bottom: 30px; }
 .note-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px; }
 .info-badges { display: flex; align-items: center; }

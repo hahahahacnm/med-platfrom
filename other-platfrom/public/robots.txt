@@ -1,0 +1,46 @@
+# robots.txt for Medical Learning Website
+
+# Allow all crawlers by default
+User-agent: *
+Allow: /
+
+# Disallow crawling of API endpoints to prevent unnecessary load and indexing of raw data
+Disallow: /api/
+
+# Disallow administration interfaces
+Disallow: /admin/
+
+# Disallow private user pages (if routing is implemented in the future)
+Disallow: /profile/
+Disallow: /favorites/
+Disallow: /mistakes/
+Disallow: /auth/
+
+# Allow crawling of public knowledge base
+Allow: /wiki/
+
+
+# Block AI crawlers (GPTBot, Google-Extended, etc.) to prevent AI training
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+# Host reference (optional)
+# Host: https://www.example.com
+
+# Sitemap Index (uncomment and update when sitemap is available)
+# Sitemap: https://www.example.com/sitemap.xml

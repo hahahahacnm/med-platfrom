@@ -219,119 +219,166 @@ onMounted(() => { fetchBanks() })
 
 <template>
   <div class="mistakes-container">
-    <n-layout style="height: 100vh;">
-      
-      <n-layout-header bordered style="padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; height: 64px;">
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <n-button quaternary circle @click="goBack"><template #icon><n-icon><MenuOutline /></n-icon></template></n-button>
-          <div style="font-size: 18px; font-weight: bold; color: #d03050; display: flex; align-items: center; gap: 8px;">
-            <n-icon><BookOutline /></n-icon> 我的错题本
-          </div>
-          <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" style="width: 180px" size="small" />
+    <div class="page-control-bar">
+      <div class="left-controls">
+        <h2 class="page-title">
+          <n-icon color="#d03050" style="margin-right: 8px; vertical-align: bottom;"><BookOutline /></n-icon>
+          我的错题本
+        </h2>
+        <div class="bank-selector">
+          <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
         </div>
+      </div>
+      
+      <div class="right-controls">
+        <n-checkbox v-model:checked="autoRemove">
+          <span style="font-size: 13px; font-weight: 500; color: #666;">答对自动移除</span>
+        </n-checkbox>
         
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <n-checkbox v-model:checked="autoRemove">
-            <span style="font-size: 13px; font-weight: 500; color: #666;">答对自动移除</span>
-          </n-checkbox>
-          
-          <n-input v-model:value="filter.keyword" placeholder="搜索关键词..." size="small" style="width: 200px" @keydown.enter="handleSearch" clearable>
+        <div class="search-box">
+          <n-input v-model:value="filter.keyword" placeholder="搜索关键词..." size="small" @keydown.enter="handleSearch" clearable>
             <template #prefix><n-icon><SearchOutline /></n-icon></template>
           </n-input>
-          <n-button type="primary" size="small" secondary @click="handleSearch">搜索</n-button>
         </div>
-      </n-layout-header>
+        <n-button type="primary" size="small" secondary @click="handleSearch">搜索</n-button>
+      </div>
+    </div>
 
-      <n-layout has-sider position="absolute" style="top: 64px; bottom: 0;">
+    <n-layout has-sider class="main-layout-area">
+      <n-layout-sider 
+        bordered 
+        collapse-mode="width" 
+        :collapsed-width="0" 
+        :width="260" 
+        show-trigger="arrow-circle" 
+        content-style="padding: 12px;" 
+        style="background-color: #fafafa;"
+      >
+        <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+          <n-icon color="#d03050"><FilterOutline /></n-icon> 错题分布 ({{ pagination.itemCount }})
+        </div>
         
-        <n-layout-sider bordered collapse-mode="width" :collapsed-width="0" :width="260" show-trigger="arrow-circle" content-style="padding: 12px;" style="background-color: #fafafa;">
-          <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
-            <n-icon color="#d03050"><FilterOutline /></n-icon> 错题分布 ({{ pagination.itemCount }})
+        <n-spin :show="loadingTree">
+          <n-tree
+            block-line
+            expand-on-click
+            :data="mistakeTree"
+            key-field="key"
+            label-field="label"
+            selectable
+            remote
+            :on-load="handleLoad" 
+            @update:selected-keys="handleNodeClick"
+            style="font-size: 13px;"
+          />
+          <div v-if="mistakeTree.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 12px;">
+            当前题库暂无错题记录
           </div>
-          
-          <n-spin :show="loadingTree">
-            <n-tree
-              block-line
-              expand-on-click
-              :data="mistakeTree"
-              key-field="key"
-              label-field="label"
-              selectable
-              remote
-              :on-load="handleLoad" 
-              @update:selected-keys="handleNodeClick"
-              style="font-size: 13px;"
-            />
-            <div v-if="mistakeTree.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 12px;">
-              当前题库暂无错题记录
-            </div>
-          </n-spin>
-        </n-layout-sider>
+        </n-spin>
+      </n-layout-sider>
 
-        <n-layout-content content-style="padding: 24px; max-width: 960px; margin: 0 auto;" :native-scrollbar="true">
-          
-          <div v-if="filter.category" style="margin-bottom: 16px;">
-             <n-tag closable type="warning" @close="filter.category = ''; fetchData()">
-               正在筛选: {{ filter.category }}
-             </n-tag>
-          </div>
+      <n-layout-content content-style="padding: 24px; max-width: 960px; margin: 0 auto;" :native-scrollbar="true">
+        
+        <div v-if="filter.category" style="margin-bottom: 16px;">
+            <n-tag closable type="warning" @close="filter.category = ''; fetchData()">
+              正在筛选: {{ filter.category }}
+            </n-tag>
+        </div>
 
-          <n-spin :show="loading">
-            <div v-if="list.length > 0">
-              <div v-for="(item, index) in list" :key="item.id" class="mistake-item-wrapper">
-                
-                <div class="mistake-toolbar">
-                  <div class="info-badges">
-                    <n-tag type="error" size="small" :bordered="false" style="margin-right: 8px;">
-                      错题 #{{ (pagination.page - 1) * pagination.pageSize + index + 1 }}
-                    </n-tag>
-                    <span style="font-size: 12px; color: #999;">
-                      收录于 {{ new Date(item.created_at).toLocaleDateString() }}
-                    </span>
-                  </div>
-                  
-                  <n-button size="tiny" type="error" ghost @click="handleRemove(item.id)">
-                     <template #icon><n-icon><TrashOutline /></n-icon></template>
-                     直接移除
-                  </n-button>
-                </div>
-
-                <QuestionCard 
-                  v-if="isValidQuestion(item.question)"
-                  :question="item.question" 
-                  :serial-number="(pagination.page - 1) * pagination.pageSize + index + 1"
-                  @answer-result="onAnswerResult"
-                />
-
-                <n-alert v-else type="warning" title="数据异常" style="margin-top: 10px;">
-                  题目内容可能已被删除 (ID: {{ item.question?.id }})
-                </n-alert>
-
-              </div>
+        <n-spin :show="loading">
+          <div v-if="list.length > 0">
+            <div v-for="(item, index) in list" :key="item.id" class="mistake-item-wrapper">
               
-              <div style="display: flex; justify-content: center; margin: 40px 0;">
-                 <n-pagination
-                   v-model:page="pagination.page"
-                   :item-count="pagination.itemCount"
-                   :page-size="pagination.pageSize"
-                   @update:page="handlePageChange"
-                 />
+              <div class="mistake-toolbar">
+                <div class="info-badges">
+                  <n-tag type="error" size="small" :bordered="false" style="margin-right: 8px;">
+                    错题 #{{ (pagination.page - 1) * pagination.pageSize + index + 1 }}
+                  </n-tag>
+                  <span style="font-size: 12px; color: #999;">
+                    收录于 {{ new Date(item.created_at).toLocaleDateString() }}
+                  </span>
+                </div>
+                
+                <n-button size="tiny" type="error" ghost @click="handleRemove(item.id)">
+                    <template #icon><n-icon><TrashOutline /></n-icon></template>
+                    直接移除
+                </n-button>
               </div>
-            </div>
 
-            <n-empty v-else-if="!loading" description="太棒了！该分类下已没有错题！" style="margin-top: 100px">
-              <template #extra>
-                <n-button type="primary" @click="filter.category = ''; fetchData()">查看全部错题</n-button>
-              </template>
-            </n-empty>
-          </n-spin>
-        </n-layout-content>
-      </n-layout>
+              <QuestionCard 
+                v-if="isValidQuestion(item.question)"
+                :question="item.question" 
+                :serial-number="(pagination.page - 1) * pagination.pageSize + index + 1"
+                @answer-result="onAnswerResult"
+              />
+
+              <n-alert v-else type="warning" title="数据验证异常" style="margin-top: 10px;">
+                题目内容可能已被删除 (ID: {{ item.question?.id }})
+              </n-alert>
+
+            </div>
+            
+            <div style="display: flex; justify-content: center; margin: 40px 0;">
+                <n-pagination
+                  v-model:page="pagination.page"
+                  :item-count="pagination.itemCount"
+                  :page-size="pagination.pageSize"
+                  @update:page="handlePageChange"
+                />
+            </div>
+          </div>
+
+          <n-empty v-else-if="!loading" description="太棒了！该分类下已没有错题！" style="margin-top: 100px">
+            <template #extra>
+              <n-button type="primary" @click="filter.category = ''; fetchData()">查看全部错题</n-button>
+            </template>
+          </n-empty>
+        </n-spin>
+      </n-layout-content>
     </n-layout>
   </div>
 </template>
 
 <style scoped>
+.mistakes-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
+}
+
+.page-control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background-color: #fff;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.left-controls, .right-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.bank-selector { width: 150px; }
+.search-box { width: 200px; }
+.main-layout-area { flex: 1; overflow: hidden; }
+
 .mistake-item-wrapper { margin-bottom: 30px; }
 .mistake-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px; }
 .info-badges { display: flex; align-items: center; }

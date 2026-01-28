@@ -25,35 +25,52 @@ const routes = [
   // ============================
   // 🟠 2. 用户页面 (需登录)
   // ============================
+  // ============================
+  // 🟠 2. 用户页面 (需登录) - 使用 MainLayout
+  // ============================
   {
     path: '/',
-    name: 'Home',
-    component: () => import('../views/Home.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/mistakes',
-    name: 'Mistakes',
-    component: () => import('../views/Mistakes.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/favorites',
-    name: 'Favorites',
-    component: () => import('../views/Favorites.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/my-notes',
-    name: 'MyNotes',
-    component: MyNotes,
-    meta: { requiresAuth: true }
-  },
-  {
-  path: '/profile',
-  name: 'Profile',
-  component: () => import('../views/personal/Profile.vue'),
-  meta: { title: '个人中心', requiresAuth: true }
+    component: () => import('../layout/MainLayout.vue'),
+    redirect: '/home', // 可选：如果希望默认路径清晰显示
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: 'home',
+        name: 'Home',
+        component: () => import('../views/Home.vue'),
+        meta: { title: '总览' }
+      },
+      {
+        path: 'quiz',
+        name: 'QuizBank',
+        component: () => import('../views/QuizBank.vue'),
+        meta: { title: '题库' }
+      },
+      {
+        path: 'mistakes',
+        name: 'Mistakes',
+        component: () => import('../views/Mistakes.vue'),
+        meta: { title: '错题集' }
+      },
+      {
+        path: 'favorites',
+        name: 'Favorites',
+        component: () => import('../views/Favorites.vue'),
+        meta: { title: '收藏夹' }
+      },
+      {
+        path: 'my-notes',
+        name: 'MyNotes',
+        component: MyNotes,
+        meta: { title: '我的笔记' }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('../views/personal/Profile.vue'),
+        meta: { title: '个人中心' }
+      }
+    ]
   },
 
   // ============================
@@ -74,10 +91,10 @@ const routes = [
         component: () => import('../views/admin/UserManagement.vue'),
         meta: { title: '用户管理' }
       },
-      
+
       // 🔥 资源管理器
       {
-        path: 'resources', 
+        path: 'resources',
         name: 'ResourceManager',
         component: () => import('../views/admin/ResourceManager.vue'),
         meta: { title: '资源管理' }
@@ -116,8 +133,8 @@ const router = createRouter({
 // 🔥🔥🔥 增强版路由守卫 🔥🔥🔥
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
-  const userRole = localStorage.getItem('role') 
-  
+  const userRole = localStorage.getItem('role')
+
   const whiteList = ['Login', 'Register']
 
   // 1. 检查 Token
@@ -133,8 +150,8 @@ router.beforeEach((to, from, next) => {
   // 3. 🛡️ 权限检查
   if (to.meta.requiresAdmin) {
     if (userRole !== 'admin' && userRole !== 'agent') {
-      alert('权限不足：非管理员禁止访问') 
-      return next({ name: 'Home' }) 
+      alert('权限不足：非管理员禁止访问')
+      return next({ name: 'Home' })
     }
   }
 

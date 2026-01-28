@@ -161,7 +161,7 @@ onMounted(() => { fetchStats() })
 
               <n-grid x-gap="12" y-gap="12" cols="2 600:4">
                 <n-grid-item v-for="(item, idx) in [
-                    {t:'开始刷题', d:'选择章节', i:ArrowForwardOutline, c:'primary', f:scrollToLibrary},
+                    {t:'开始刷题', d:'选择章节', i:ArrowForwardOutline, c:'primary', f:()=>router.push('/quiz')},
                     {t:'消灭错题', d:'精准复习', i:BookOutline, c:'error', f:()=>router.push('/mistakes')},
                     {t:'我的收藏', d:'重点关注', i:StarOutline, c:'warning', f:()=>router.push('/favorites')},
                     {t:'复习笔记', d:'学习心得', i:JournalOutline, c:'info', f:()=>router.push('/my-notes')}
