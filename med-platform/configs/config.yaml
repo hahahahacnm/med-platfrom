@@ -1,0 +1,16 @@
+app:
+  name: med-platform
+  env: dev
+  port: 8080
+
+log:
+  level: debug
+
+data:
+  database:
+    driver: postgres
+    source: "host=localhost user=postgres password=243658cjh dbname=med_platform port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+
+jwt:
+  secret: "243658cjh" # 生产环境这个要很复杂
+  expire: 24 # 过期时间 (小时)
