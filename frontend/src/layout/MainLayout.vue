@@ -12,7 +12,7 @@ import {
   LogOutOutline,
   MenuOutline,
   CloseOutline,
-  SchoolOutline,
+  CheckmarkCircle,
   LibraryOutline
 } from '@vicons/ionicons5'
 import { NIcon, NAvatar, NDrawer, NDrawerContent } from 'naive-ui'
@@ -53,7 +53,7 @@ const handleLogout = () => {
     <aside class="sidebar desktop-sidebar">
       <div class="logo-area">
         <div class="logo-icon">
-          <n-icon size="24" color="#fff"><SchoolOutline /></n-icon>
+          <n-icon size="24" color="#fff"><CheckmarkCircle /></n-icon>
         </div>
         <span class="logo-text">题酷</span>
       </div>
@@ -86,7 +86,7 @@ const handleLogout = () => {
     <header class="mobile-header">
       <div class="logo-area-mobile">
         <div class="logo-icon-mobile">
-          <n-icon size="20" color="#fff"><SchoolOutline /></n-icon>
+          <n-icon size="20" color="#fff"><CheckmarkCircle /></n-icon>
         </div>
         <span class="logo-text-mobile">题酷</span>
       </div>
