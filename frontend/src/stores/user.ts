@@ -11,6 +11,8 @@ export const useUserStore = defineStore('user', () => {
   const username = ref(localStorage.getItem('username') || '')
   const role = ref(localStorage.getItem('role') || '') 
   const nickname = ref(localStorage.getItem('nickname') || '')
+  // 🔥🔥🔥 必须补上 avatar，否则左上角头像是空的 🔥🔥🔥
+  const avatar = ref(localStorage.getItem('avatar') || '')
 
   // ==========================================
   // 2. Action: 登录
@@ -24,23 +26,24 @@ export const useUserStore = defineStore('user', () => {
       if (res.token) {
         // --- 更新 State ---
         token.value = res.token
-        
-        // 🔥🔥🔥 核心修复：后端现在直接返回 id 了，直接拿即可！无需解析 Token 🔥🔥🔥
-        // 这里的 res.id 对应后端返回的 data.id
         id.value = String(res.id || '') 
         
         username.value = res.username || ''
         role.value = res.role || 'user' 
         nickname.value = res.nickname || ''
+        // 🔥 保存头像到 State
+        avatar.value = res.avatar || ''
 
         // --- 持久化 (存入浏览器缓存) ---
         localStorage.setItem('token', res.token)
-        localStorage.setItem('id', String(id.value)) // 存入 ID
+        localStorage.setItem('id', String(id.value))
         localStorage.setItem('username', username.value)
         localStorage.setItem('role', role.value)
         localStorage.setItem('nickname', nickname.value)
+        // 🔥 保存头像到本地缓存
+        localStorage.setItem('avatar', avatar.value)
         
-        console.log('✅ 登录成功，当前用户 ID:', id.value, '角色:', role.value)
+        console.log('✅ 登录成功，当前用户 ID:', id.value, '头像:', avatar.value)
         return true
       }
       return false
@@ -60,6 +63,7 @@ export const useUserStore = defineStore('user', () => {
     username.value = ''
     role.value = ''
     nickname.value = ''
+    avatar.value = '' // 🔥 清空头像状态
 
     // 清空 LocalStorage
     localStorage.removeItem('token')
@@ -67,6 +71,7 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('username')
     localStorage.removeItem('role')
     localStorage.removeItem('nickname')
+    localStorage.removeItem('avatar') // 🔥 移除头像缓存
   }
 
   // 4. 导出给组件使用
@@ -75,6 +80,7 @@ export const useUserStore = defineStore('user', () => {
     token, 
     username, 
     nickname,
+    avatar, // 🔥 必须导出！Dashboard.vue 才能用 userStore.avatar
     role, 
     login, 
     logout 
