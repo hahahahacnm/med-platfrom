@@ -6,6 +6,7 @@ import UserAuthManager from '../views/admin/UserAuthManager.vue'
 
 // 引入布局组件
 import AdminLayout from '../layout/AdminLayout.vue'
+import PaymentTest from '../views/PaymentTest.vue'
 
 const routes = [
   // ============================
@@ -64,12 +65,19 @@ const routes = [
         component: MyNotes,
         meta: { title: '我的笔记' }
       },
+      // 把它放在 Home 的同一级，或者根据你的布局需求放置
+      {
+        path: '/payment-test',
+        name: 'PaymentTest',
+        component: PaymentTest,
+        meta: { title: '订阅中心' } // 需要登录才能买
+      },
       {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/personal/Profile.vue'),
         meta: { title: '个人中心' }
-      }
+      },
     ]
   },
 
