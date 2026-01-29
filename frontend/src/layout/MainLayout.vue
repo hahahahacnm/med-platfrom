@@ -13,9 +13,10 @@ import {
   MenuOutline,
   CloseOutline,
   CheckmarkCircle,
-  LibraryOutline
+  LibraryOutline,
+  CartOutline // 🛒 引入购物车图标
 } from '@vicons/ionicons5'
-import { NIcon, NAvatar, NDrawer, NDrawerContent } from 'naive-ui'
+import { NIcon, NAvatar, NDrawer, NDrawerContent } from 'naive-ui' // 移除了 NBadge
 
 const router = useRouter()
 const route = useRoute()
@@ -33,6 +34,7 @@ const menuItems = computed(() => [
   { label: '错题集', key: 'Mistakes', icon: BookOutline, path: '/mistakes' },
   { label: '收藏夹', key: 'Favorites', icon: StarOutline, path: '/favorites' },
   { label: '笔记本', key: 'MyNotes', icon: JournalOutline, path: '/my-notes' },
+    { label: '订阅商城', key: 'PaymentTest', icon: CartOutline, path: '/payment-test' }, 
   ...(userStore.role === 'admin' ? [{ label: '管理员后台', key: 'Admin', icon: SettingsOutline, path: '/admin' }] : [])
 ])
 
@@ -49,7 +51,6 @@ const handleLogout = () => {
 
 <template>
   <div class="app-layout">
-    <!-- Desktop Sidebar -->
     <aside class="sidebar desktop-sidebar">
       <div class="logo-area">
         <div class="logo-icon">
@@ -68,7 +69,7 @@ const handleLogout = () => {
         >
           <n-icon size="20" class="nav-icon"><component :is="item.icon" /></n-icon>
           <span class="nav-label">{{ item.label }}</span>
-        </div>
+          </div>
       </nav>
 
       <div class="user-profile-area" @click="handleNavigate('/profile')">
@@ -82,7 +83,6 @@ const handleLogout = () => {
       </div>
     </aside>
 
-    <!-- Mobile Header -->
     <header class="mobile-header">
       <div class="logo-area-mobile">
         <div class="logo-icon-mobile">
@@ -95,7 +95,6 @@ const handleLogout = () => {
       </button>
     </header>
 
-    <!-- Mobile Drawer -->
     <n-drawer v-model:show="isMobileMenuOpen" placement="right" width="280">
       <n-drawer-content title="菜单" closable body-content-style="padding: 0;">
         <nav class="mobile-nav-menu">
@@ -108,7 +107,7 @@ const handleLogout = () => {
           >
             <n-icon size="20" class="nav-icon"><component :is="item.icon" /></n-icon>
             <span class="nav-label">{{ item.label }}</span>
-          </div>
+            </div>
         </nav>
         
         <template #footer>
@@ -131,7 +130,6 @@ const handleLogout = () => {
       </n-drawer-content>
     </n-drawer>
 
-    <!-- Main Content -->
     <main class="main-content">
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
