@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
-  NCard, NGrid, NGridItem, NIcon, NProgress, NSkeleton, NSpace, 
-  NAvatar, NTag, NTooltip, NCollapse, NCollapseItem, NEmpty,
-  NNumberAnimation
+  NCard, NIcon, NSkeleton, NAvatar, NTag, NTooltip, NCollapse, NCollapseItem, NEmpty,
+  NNumberAnimation, NButton, NModal, NSpin
 } from 'naive-ui'
 import { 
   ArrowForwardOutline, BookOutline, StarOutline, JournalOutline,
-  Flame, PodiumOutline, SchoolOutline, 
-  TimeOutline, CheckmarkCircleOutline, TrendingUpOutline,
-  RibbonOutline, BarChartOutline, TrophyOutline
+  Flame, BarChartOutline, TrophyOutline, SchoolOutline, 
+  TimeOutline, CheckmarkCircleOutline, TrendingUpOutline, RibbonOutline
 } from '@vicons/ionicons5'
 import request from '../utils/request'
 import { useUserStore } from '../stores/user'
@@ -19,6 +17,7 @@ const userStore = useUserStore()
 const router = useRouter()
 const loading = ref(true)
 
+// Dashboard 数据
 const stats = ref({ 
     total_count: 0, 
     today_count: 0, 
@@ -29,6 +28,9 @@ const stats = ref({
     rank_list: [] as any[]
 })
 
+// ===========================
+// 1. Dashboard 数据获取
+// ===========================
 const fetchStats = async () => {
   loading.value = true
   try {
@@ -49,6 +51,56 @@ const fetchStats = async () => {
   }
 }
 
+// ===========================
+// 2. 完整排行榜逻辑 (弹窗)
+// ===========================
+const showRankModal = ref(false)
+const rankListFull = ref<any[]>([])
+const rankLoading = ref(false)
+const rankPage = ref(1)
+const rankHasMore = ref(true)
+
+const openRankModal = () => {
+    showRankModal.value = true
+    rankPage.value = 1
+    rankListFull.value = []
+    rankHasMore.value = true
+    fetchFullRank()
+}
+
+const fetchFullRank = async () => {
+    if (rankLoading.value || !rankHasMore.value) return
+    rankLoading.value = true
+    try {
+        const res: any = await request.get('/rank/daily', {
+            params: { page: rankPage.value, page_size: 20 }
+        })
+        if (res.data) {
+            if (rankPage.value === 1) {
+                rankListFull.value = res.data
+            } else {
+                rankListFull.value = [...rankListFull.value, ...res.data]
+            }
+            rankHasMore.value = res.has_more
+            if (rankHasMore.value) rankPage.value++
+        }
+    } catch (e) {
+        console.error(e)
+    } finally {
+        rankLoading.value = false
+    }
+}
+
+const handleRankScroll = (e: Event) => {
+    const target = e.target as HTMLElement
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
+        fetchFullRank()
+    }
+}
+
+// ===========================
+// 3. 通用辅助 & 头像处理
+// ===========================
 const greeting = computed(() => {
   const hour = new Date().getHours()
   if (hour < 5) return '夜深了'
@@ -59,29 +111,34 @@ const greeting = computed(() => {
   return '晚上好'
 })
 
+// 头像处理：直接读取 userStore，如果没有就undefined(触发fallback)
 const getAvatar = (path: string) => {
     if (!path) return undefined
     return path.startsWith('http') ? path : `http://localhost:8080${path}`
 }
 
-onMounted(() => { fetchStats() })
+onMounted(() => { 
+    // 🔥🔥🔥 这里的代码现在非常干净 🔥🔥🔥
+    // 我们不再需要在这里请求 /user/profile 了
+    // 因为 user.ts 已经保证了登录后头像就在 Store 里
+    fetchStats(); 
+})
 </script>
 
 <template>
   <div class="dashboard-container">
-    <!-- Header Section -->
     <div class="welcome-banner animate-enter" style="animation-delay: 0.1s;">
         <div class="banner-glass">
             <div class="user-welcome">
                 <div class="avatar-ring">
-                     <n-avatar 
+                      <n-avatar 
                         round 
                         :size="72" 
                         :src="getAvatar(userStore.avatar)" 
                         fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
                         class="user-avatar"
-                     />
-                     <div class="status-badge"></div>
+                      />
+                      <div class="status-badge"></div>
                 </div>
                 <div class="text-content">
                     <h2 class="greet-title">{{ greeting }}，{{ userStore.nickname || userStore.username }}</h2>
@@ -116,25 +173,22 @@ onMounted(() => { fetchStats() })
                  </div>
                  <div class="stat-divider"></div>
                  <div class="stat-item">
-                     <div class="stat-icon-wrapper blue-grad">
-                        <n-icon><TrendingUpOutline /></n-icon>
-                     </div>
-                     <div class="stat-meta">
-                         <div class="label">累计做题</div>
-                         <div class="value"><n-number-animation :from="0" :to="stats.total_count" /></div>
-                     </div>
+                      <div class="stat-icon-wrapper blue-grad">
+                         <n-icon><TrendingUpOutline /></n-icon>
+                      </div>
+                      <div class="stat-meta">
+                          <div class="label">累计做题</div>
+                          <div class="value"><n-number-animation :from="0" :to="stats.total_count" /></div>
+                      </div>
                  </div>
             </div>
         </div>
     </div>
 
-    <!-- Main Layout Grid -->
     <div class="main-grid">
       
-      <!-- Left Column (Main Content) -->
       <div class="main-column">
           
-          <!-- Quick Actions -->
           <div class="section-actions animate-enter" style="animation-delay: 0.2s;">
               <div class="grid-actions">
                   <div class="action-card" @click="router.push('/quiz')">
@@ -170,7 +224,7 @@ onMounted(() => { fetchStats() })
                       <div class="ac-bg-shape bg-soft-blue"></div>
                   </div>
 
-                  <div class="action-card" @click="router.push('/my-notes')">
+                  <div class="action-card" @click="router.push('/notes')">
                        <div class="ac-content">
                           <div class="ac-icon bg-blue-4"><n-icon><JournalOutline/></n-icon></div>
                           <div class="ac-info">
@@ -183,7 +237,6 @@ onMounted(() => { fetchStats() })
               </div>
           </div>
 
-          <!-- Heatmap -->
           <div class="chart-section animate-enter" style="animation-delay: 0.3s;">
              <n-card :bordered="false" class="panel-card" content-style="padding: 24px;">
                   <template #header>
@@ -220,7 +273,6 @@ onMounted(() => { fetchStats() })
               </n-card>
           </div>
 
-          <!-- Analysis -->
           <div class="analysis-section animate-enter" style="animation-delay: 0.4s;">
               <n-card :bordered="false" class="panel-card" content-style="padding: 0;">
                    <template #header>
@@ -278,7 +330,6 @@ onMounted(() => { fetchStats() })
           </div>
       </div>
 
-      <!-- Right Column (Sidebar) -->
       <div class="side-column animate-enter" style="animation-delay: 0.5s;">
           <n-card :bordered="false" class="panel-card rank-panel" content-style="padding: 0;">
               <template #header>
@@ -287,6 +338,7 @@ onMounted(() => { fetchStats() })
                           <div class="icon-box themed-box"><n-icon><TrophyOutline /></n-icon></div>
                           <span>今日卷王榜</span>
                        </div>
+                       <n-button text size="tiny" type="primary" @click="openRankModal">全部 ></n-button>
                   </div>
               </template>
               
@@ -319,12 +371,44 @@ onMounted(() => { fetchStats() })
               <div class="quote-content">
                   <div class="quote-icon"><n-icon><RibbonOutline /></n-icon></div>
                   <p>"医者仁心，术业专攻。"</p>
-                  <!-- <div class="quote-author">— William Osler</div> -->
               </div>
           </div>
       </div>
 
     </div>
+
+    <n-modal v-model:show="showRankModal" preset="card" title="今日卷王总榜 🏆" style="width: 500px; max-width: 90%;" :bordered="false" size="huge">
+        <div class="full-rank-container" @scroll="handleRankScroll">
+            <div v-for="(user, idx) in rankListFull" :key="user.user_id" class="rank-row animate-in" :style="{animationDelay: idx * 0.05 + 's'}">
+                <div class="rank-idx">
+                   <span v-if="user.rank === 1">🥇</span>
+                   <span v-else-if="user.rank === 2">🥈</span>
+                   <span v-else-if="user.rank === 3">🥉</span>
+                   <span v-else class="num">{{ user.rank }}</span>
+                </div>
+                
+                <div class="rank-info">
+                   <n-avatar round :size="40" :src="getAvatar(user.avatar)" fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg" />
+                   <div class="info-text">
+                      <div class="name-row">
+                         <span class="name">{{ user.nickname || user.username }}</span>
+                         <n-tag v-if="user.school" size="tiny" :bordered="false" class="school-tag">
+                            {{ user.school }}
+                         </n-tag>
+                      </div>
+                      <div class="score">今日刷题 <span class="highlight">{{ user.count }}</span></div>
+                   </div>
+                </div>
+            </div>
+
+            <div class="loading-state">
+               <n-spin v-if="rankLoading" size="small" />
+               <div v-else-if="!rankHasMore && rankListFull.length > 0" class="end-text">--- 到底了，前100名展示完毕 ---</div>
+               <n-empty v-else-if="rankListFull.length === 0" description="今天还没人刷题，快去抢沙发！" />
+            </div>
+        </div>
+    </n-modal>
+
   </div>
 </template>
 
@@ -332,13 +416,12 @@ onMounted(() => { fetchStats() })
 /* VARIABLE DEFINITIONS */
 .dashboard-container { 
     --primary: #2080f0;
-    --primary-soft: #e3f2fd;
     --text-main: #334155;
     --text-sub: #64748b;
     --radius-box: 16px;
     --radius-item: 12px;
     width: 100%; 
-    box-sizing: border-box; /* Prevent padding from causing overflow */
+    box-sizing: border-box; 
     margin: 0 auto; 
     padding: 24px 24px 40px 24px; 
 }
@@ -355,8 +438,8 @@ onMounted(() => { fetchStats() })
 .welcome-banner {
     position: relative;
     border-radius: var(--radius-box);
-    background: linear-gradient(120deg, #eff6ff 0%, #f8fafc 100%); /* Subtle Blue */
-    box-shadow: 0 4px 15px rgba(32, 128, 240, 0.08); /* Blue shadow */
+    background: linear-gradient(120deg, #eff6ff 0%, #f8fafc 100%); 
+    box-shadow: 0 4px 15px rgba(32, 128, 240, 0.08); 
     overflow: hidden;
     margin-bottom: 24px;
     border: 1px solid #eef2f6;
@@ -386,7 +469,7 @@ onMounted(() => { fetchStats() })
     right: 5px;
     width: 14px;
     height: 14px;
-    background: #2080f0; /* Blue for active */
+    background: #2080f0; 
     border: 2px solid #fff;
     border-radius: 50%;
 }
@@ -405,7 +488,7 @@ onMounted(() => { fetchStats() })
     align-items: center;
     gap: 6px;
 }
-.icon-flame { color: #f0a020; font-size: 18px; } /* Keep flame orange as it is a natural color of flame */
+.icon-flame { color: #f0a020; font-size: 18px; } 
 .highlight { color: #2080f0; font-weight: 800; }
 
 /* Stats in Banner */
@@ -426,7 +509,6 @@ onMounted(() => { fetchStats() })
     font-size: 22px; color: #fff;
     box-shadow: 0 4px 10px rgba(32, 128, 240, 0.2);
 }
-/* Unified Blue Gradient for Stats */
 .blue-grad { background: linear-gradient(135deg, #4299e1, #2b6cb0); }
 
 .stat-meta .label { font-size: 12px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 2px; }
@@ -437,11 +519,11 @@ onMounted(() => { fetchStats() })
 /* 2. Main Grid Layout */
 .main-grid {
     display: grid;
-    grid-template-columns: 1fr 360px; /* Fixed width for sidebar, fluid for main */
+    grid-template-columns: 1fr 360px; 
     gap: 24px;
     align-items: start;
 }
-.main-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; /* Prevent flex overflow */ }
+.main-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .side-column { display: flex; flex-direction: column; gap: 24px; }
 
 /* 3. Panel Cards */
@@ -457,11 +539,10 @@ onMounted(() => { fetchStats() })
 
 .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #f8fafc; }
 .title-with-icon { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; color: var(--text-main); }
-/* Unified Icon Boxes */
 .icon-box { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; }
 .themed-box { background: var(--primary); box-shadow: 0 4px 10px rgba(32, 128, 240, 0.25); }
 
-/* 4. Quick Actions Grid - UNIFIED BLUE */
+/* 4. Quick Actions Grid */
 .grid-actions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -485,11 +566,10 @@ onMounted(() => { fetchStats() })
     width: 48px; height: 48px; border-radius: var(--radius-item); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;
     box-shadow: 0 4px 12px rgba(32, 128, 240, 0.15);
 }
-/* Different shades of blue for distinction but same hue */
-.bg-blue-1 { background: #3b82f6; } /* Blue 500 */
-.bg-blue-2 { background: #2563eb; } /* Blue 600 */
-.bg-blue-3 { background: #1d4ed8; } /* Blue 700 */
-.bg-blue-4 { background: #1e40af; } /* Blue 800 */
+.bg-blue-1 { background: #3b82f6; } 
+.bg-blue-2 { background: #2563eb; } 
+.bg-blue-3 { background: #1d4ed8; } 
+.bg-blue-4 { background: #1e40af; } 
 
 .ac-info h3 { margin: 0; font-size: 16px; font-weight: 700; color: #1e293b; }
 .ac-info p { margin: 4px 0 0 0; font-size: 12px; color: #64748b; }
@@ -500,7 +580,7 @@ onMounted(() => { fetchStats() })
 .bg-soft-blue { background: #2080f0; }
 .action-card:hover .ac-bg-shape { transform: scale(1.5); opacity: 0.1; }
 
-/* 5. Heatmap - Blue Theme */
+/* 5. Heatmap */
 .heatmap-container { padding: 10px 0; overflow: hidden; }
 .heatmap-scroll { 
     display: flex; gap: 6px; align-items: flex-end; justify-content: space-between; 
@@ -512,14 +592,13 @@ onMounted(() => { fetchStats() })
 .heat-col { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; min-width: 24px; cursor: pointer; height: 100%; justify-content: flex-end; }
 .heat-track { width: 100%; height: 100%; background: #f8fafc; border-radius: 8px; position: relative; display: flex; align-items: flex-end; overflow: hidden; }
 .heat-fill { width: 100%; border-radius: 6px; transition: height 0.6s ease; }
-/* Blue Monochrome Scale */
 .level-0 { background: #e2e8f0; } 
 .level-1 { background: #bfdbfe; } 
 .level-2 { background: #60a5fa; } 
 .level-3 { background: #3b82f6; } 
 .level-4 { background: #2563eb; }
 .heat-label { font-size: 10px; color: #94a3b8; font-family: monospace; }
-.heat-col:hover .heat-fill { background: #1d4ed8; } /* Darker blue on hover */
+.heat-col:hover .heat-fill { background: #1d4ed8; }
 
 /* 6. Subject Analysis */
 .custom-collapse :deep(.n-collapse-item__header) { padding: 16px 24px !important; transition: background 0.2s; }
@@ -553,7 +632,7 @@ onMounted(() => { fetchStats() })
 
 /* 8. Quote Card */
 .daily-quote-card {
-    background: #1e293b; /* Dark Slate Blue */
+    background: #1e293b; 
     color: #fff;
     padding: 24px;
     border-radius: var(--radius-box);
@@ -564,76 +643,61 @@ onMounted(() => { fetchStats() })
 .quote-icon { font-size: 32px; margin-bottom: 12px; color: #3b82f6; opacity: 1; }
 .quote-content p { margin: 0; font-size: 14px; line-height: 1.6; font-style: italic; color: #e2e8f0; position: relative; z-index: 10; }
 
-/* 9. Responsive Adjustments (Mobile/Tablet) */
+/* 9. Full Rank Modal Styles */
+.full-rank-container {
+    height: 60vh;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.rank-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+.rank-idx { width: 40px; font-size: 18px; font-weight: 800; text-align: center; margin-right: 12px; }
+.rank-idx .num { color: #94a3b8; font-size: 16px; }
+.rank-info { flex: 1; display: flex; align-items: center; gap: 12px; }
+.info-text { display: flex; flex-direction: column; gap: 2px; }
+.name-row { display: flex; align-items: center; gap: 8px; }
+.name { font-weight: 700; font-size: 14px; color: #334155; }
+.school-tag { background: #eff6ff; color: #3b82f6; transform: scale(0.9); transform-origin: left center; }
+.score { font-size: 12px; color: #64748b; }
+.loading-state { text-align: center; padding: 20px; font-size: 12px; color: #94a3b8; }
+
+/* 10. Responsive Adjustments */
 @media (max-width: 900px) {
     .main-grid { grid-template-columns: 1fr; gap: 20px; }
     .side-column { order: 2; }
 }
 
 @media (max-width: 650px) {
-    .dashboard-container { padding: 0 0 40px 0; /* Remove side padding inside dashboard to use MainLayout's 16px */ }
-    
-    /* Compact Banner for Mobile */
-    .banner-glass { 
-        flex-direction: column; 
-        align-items: stretch; /* Stretch to fill width */
-        padding: 20px 16px; 
-        gap: 16px; 
-    }
-    .user-welcome { 
-        width: 100%; 
-        justify-content: flex-start; 
-        /* Keep row layout for avatar + text to save vertical space */
-        flex-direction: row; 
-        align-items: center;
-    }
+    .dashboard-container { padding: 0 0 40px 0; }
+    .banner-glass { flex-direction: column; align-items: stretch; padding: 20px 16px; gap: 16px; }
+    .user-welcome { width: 100%; justify-content: flex-start; flex-direction: row; align-items: center; }
     .user-avatar { width: 48px !important; height: 48px !important; font-size: 18px !important; }
     .avatar-ring { padding: 3px; }
     .greet-title { font-size: 20px; }
     .greet-sub { font-size: 13px; }
-
-    /* Compact Stats Grid */
-    .header-stats { 
-        width: 100%; 
-        display: grid; 
-        grid-template-columns: 1fr 1fr 1fr; 
-        padding: 12px 8px; 
-        gap: 4px; 
-        background: rgba(255,255,255,0.6);
-    }
-    .stat-item { 
-        flex-direction: column; 
-        align-items: center; 
-        text-align: center; 
-        min-width: auto; 
-        gap: 4px; 
-    }
+    .header-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 12px 8px; gap: 4px; background: rgba(255,255,255,0.6); }
+    .stat-item { flex-direction: column; align-items: center; text-align: center; min-width: auto; gap: 4px; }
     .stat-divider { display: none; }
     .stat-icon-wrapper { width: 32px; height: 32px; font-size: 16px; margin-bottom: 2px; }
     .stat-meta .label { font-size: 9px; transform: scale(0.9); }
     .stat-meta .value { font-size: 16px; font-weight: 800; }
-    
-    /* 2-Column Actions */
     .grid-actions { grid-template-columns: 1fr 1fr; gap: 12px; }
     .action-card { padding: 16px; }
     .ac-icon { width: 40px; height: 40px; font-size: 20px; }
     .ac-info h3 { font-size: 14px; }
     .ac-info p { font-size: 11px; }
-
-    /* Compact Collapse */
     .custom-collapse :deep(.n-collapse-item__header) { padding: 12px 16px !important; }
-    .sub-detail-grid { padding: 12px; gap: 10px; grid-template-columns: 1fr; } /* Stack chapters on very small screens? or 2 col? */
-    /* Let's try 2 columns for broader mobile, 1 for tiny */
-    .sub-detail-grid { grid-template-columns: repeat(2, 1fr); } 
-    
+    .sub-detail-grid { padding: 12px; gap: 10px; grid-template-columns: repeat(2, 1fr); } 
     .heatmap-scroll { height: 75px; }
-    .heat-tooltip { display: none; /* Tooltips tricky on touch, rely on click/tap if supported */ }
-    
+    .heat-tooltip { display: none; }
     .card-header { padding: 12px 16px; }
 }
 
 @media (max-width: 380px) {
-    /* Very small devices */
     .sub-detail-grid { grid-template-columns: 1fr; }
     .header-stats { gap: 2px; }
 }
