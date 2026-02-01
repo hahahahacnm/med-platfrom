@@ -55,8 +55,25 @@ const rightCollapsed = ref(true)
 const rightPinned = ref(false)
 
 // Left Sidebar Logic
-const handleLeftEnter = () => { if (!leftPinned.value) leftCollapsed.value = false }
-const handleLeftLeave = () => { if (!leftPinned.value) leftCollapsed.value = true }
+const isBankSelectOpen = ref(false)
+const isLeftHovered = ref(false)
+
+// Left Sidebar Logic
+const handleLeftEnter = () => { 
+    isLeftHovered.value = true
+    if (!leftPinned.value) leftCollapsed.value = false 
+}
+const handleLeftLeave = () => { 
+    isLeftHovered.value = false
+    if (!leftPinned.value && !isBankSelectOpen.value) leftCollapsed.value = true 
+}
+
+watch(isBankSelectOpen, (isOpen) => {
+    if (!isOpen && !leftPinned.value && !isLeftHovered.value) {
+        leftCollapsed.value = true
+    }
+})
+
 const toggleLeftPin = () => { 
     leftPinned.value = !leftPinned.value
     if (leftPinned.value) leftCollapsed.value = false // Ensure expanded when pinned
@@ -382,7 +399,14 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
             
             <div class="sider-bank-select" style="padding: 0 16px 12px 16px; background: #fafafa; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px;">
                <span style="font-size: 13px; color: #666; white-space: nowrap;">选择学科</span>
-               <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="small">
+               <n-select 
+                   v-model:value="currentBank" 
+                   :options="bankOptions" 
+                   placeholder="切换题库" 
+                   @update:value="handleBankChange" 
+                   size="small"
+                   @update:show="(val) => isBankSelectOpen = val"
+               >
                  <template #prefix><n-icon><LibraryOutline /></n-icon></template>
                </n-select>
             </div>
