@@ -6,7 +6,8 @@ import request from '../utils/request'
 import { 
   NLayout, NLayoutSider, NLayoutContent, 
   NTree, NSpin, NEmpty, NButton, NPageHeader, NTag,
-  NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect, NTooltip
+  NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect, NTooltip,
+  NDrawer, NDrawerContent
 } from 'naive-ui'
 import { 
   SearchOutline, LibraryOutline, HomeOutline, PushOutline, Push, MenuOutline, ListOutline, RefreshOutline
@@ -24,6 +25,8 @@ const treeData = ref<any[]>([])
 const visibleQuestions = ref<any[]>([]) 
 const globalSheetItems = ref<any[]>([]) 
 
+const expandedKeys = ref<any[]>([]) // Shared expanded keys
+
 const loadingTree = ref(false)  
 const loadingQuestions = ref(false) 
 const currentCategory = ref('') 
@@ -37,6 +40,13 @@ const loadTrigger = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 const globalQuestionCounter = ref(0) 
 const pagination = ref({ page: 1, pageSize: 200, itemCount: 0 })
+
+// 🔥 Mobile States
+const isMobile = ref(false)
+const mobileLeftOpen = ref(false)
+const mobileRightOpen = ref(false)
+
+const checkMobile = () => { isMobile.value = window.innerWidth <= 768 } // Simple breakpoint
 
 // 🔥 Sidebar Control States
 const leftCollapsed = ref(true)
@@ -131,6 +141,25 @@ const handleNodeClick = (keys: any, option: any) => {
   resetState()
   currentCategory.value = node.full || node.label 
   fetchQuestions(false) 
+
+  // Force expand on click
+  if (!expandedKeys.value.includes(node.key)) {
+      expandedKeys.value.push(node.key)
+  }
+}
+
+const handleMobileNodeClick = (keys: any, option: any) => {
+    handleNodeClick(keys, option)
+    // Removed auto-close logic based on user feedback. 
+    // User can manually close the drawer to view questions.
+    /*
+    if (option && option.length > 0) {
+        const node = option[0]
+        if (node.isLeaf) {
+            mobileLeftOpen.value = false
+        }
+    }
+    */
 }
 
 const resetState = () => {
@@ -280,7 +309,9 @@ const setupIntersectionObserver = () => {
     if (loadTrigger.value) observer.observe(loadTrigger.value) 
 }
 
-onMounted(async () => { 
+onMounted(async () => {
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
     await fetchBanks(); 
     if (currentBank.value) fetchTreeRoot(); 
     nextTick(() => { setupIntersectionObserver() }) 
@@ -291,25 +322,12 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 
 <template>
   <div class="quiz-container">
-    <!-- Header Controls -->
-    <div class="page-control-bar">
-      <div class="left-controls">
-        <h2 class="page-title">
-           <n-icon color="#18a058" style="margin-right: 8px; vertical-align: bottom;"><LibraryOutline /></n-icon>
-           题库练习
-        </h2>
-        
-
-      </div>
-
-
-    </div>
-
     <!-- Main Layout -->
     <n-layout has-sider class="main-layout-area">
       
-      <!-- 🔥 LEFT SIDER: CHAPTERS 🔥 -->
+      <!-- 🔥 LEFT SIDER: CHAPTERS (Desktop) 🔥 -->
       <n-layout-sider 
+        v-if="!isMobile"
         bordered 
         collapse-mode="width" 
         :collapsed-width="36" 
@@ -350,7 +368,8 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
                 <n-spin :show="loadingTree">
                 <n-tree 
                     block-line 
-                    expand-on-click 
+                    v-model:expanded-keys="expandedKeys"
+                    :cancelable="false"
                     :data="treeData" 
                     key-field="key" 
                     label-field="label" 
@@ -368,14 +387,18 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
       </n-layout-sider>
 
       <n-layout has-sider sider-placement="right" class="content-layout">
-        <n-layout-content content-style="padding: 24px; background-color: #f8fafc;" :native-scrollbar="true" id="question-scroll-container">
+        <n-layout-content 
+            :content-style="{ padding: isMobile ? '12px' : '24px', backgroundColor: '#f8fafc' }" 
+            :native-scrollbar="true" 
+            id="question-scroll-container"
+        >
           
           <n-page-header v-if="isSearching" style="margin-bottom: 20px;">
             <template #title>🔍 搜索结果: "{{ searchKeyword }}"</template>
             <template #extra><n-button size="small" @click="clearSearch">清除</n-button></template>
           </n-page-header>
           
-          <n-page-header v-else-if="currentCategory" style="margin-bottom: 20px;">
+          <n-page-header v-else-if="currentCategory" :style="{ marginBottom: isMobile ? '12px' : '20px' }">
             <template #title>
               <span style="font-size: 14px; color: #666;">{{ currentBank }} / </span> {{ currentCategory }}
             </template>
@@ -416,9 +439,9 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
           <n-back-top :right="300" :bottom="50" />
         </n-layout-content>
 
-        <!-- 🔥 RIGHT SIDER: ANSWER SHEET 🔥 -->
+        <!-- 🔥 RIGHT SIDER: ANSWER SHEET (Desktop) 🔥 -->
         <n-layout-sider 
-          v-if="globalSheetItems.length > 0 || rightPinned" 
+          v-if="!isMobile && (globalSheetItems.length > 0 || rightPinned)" 
           bordered 
           collapse-mode="width" 
           :collapsed-width="36" 
@@ -472,6 +495,75 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
         </n-layout-sider>
       </n-layout>
     </n-layout>
+
+    <!-- 📱 Mobile Floating Buttons -->
+    <div v-if="isMobile" class="mobile-fabs">
+       <div class="fab-btn left-fab" @click="mobileLeftOpen = true">
+          <n-icon size="24" color="#fff"><MenuOutline /></n-icon>
+       </div>
+       <div class="fab-btn right-fab" @click="mobileRightOpen = true" v-if="globalSheetItems.length > 0">
+          <n-icon size="24" color="#fff"><ListOutline /></n-icon>
+          <div class="fab-badge" v-if="globalSheetItems.length">{{ globalSheetItems.length }}</div>
+       </div>
+    </div>
+
+    <!-- 📱 Mobile Left Drawer (Chapters) -->
+    <n-drawer v-model:show="mobileLeftOpen" placement="left" width="100%">
+       <n-drawer-content title="章节目录" closable>
+           <div class="sider-bank-select" style="padding: 0 0 16px 0; background: #fff; border-bottom: 1px dashed #eee;">
+               <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" >
+                 <template #prefix><n-icon><LibraryOutline /></n-icon></template>
+               </n-select>
+            </div>
+            
+            <div class="sider-scroll-area">
+                <n-spin :show="loadingTree">
+                <n-tree 
+                    block-line 
+                    v-model:expanded-keys="expandedKeys"
+                    :cancelable="false"
+                    :data="treeData" 
+                    key-field="key" 
+                    label-field="label" 
+                    children-field="children" 
+                    remote
+                    :on-load="handleLoad"
+                    @update:selected-keys="handleMobileNodeClick" 
+                />
+                </n-spin>
+                <div v-if="treeData.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 13px;">
+                    请先选择题库
+                </div>
+            </div>
+       </n-drawer-content>
+    </n-drawer>
+
+    <!-- 📱 Mobile Right Drawer (Sheet) -->
+    <n-drawer v-model:show="mobileRightOpen" placement="right" width="100%">
+       <n-drawer-content :title="`题目总览 (${globalSheetItems.length})`" closable>
+           <div class="sheet-search" style="padding: 0 0 16px 0; border-bottom: 1px solid #f0f0f0;">
+                <n-input v-model:value="searchKeyword" placeholder="搜索题目..." round @keydown.enter="handleSearch" @clear="clearSearch" clearable>
+                   <template #prefix><n-icon :component="SearchOutline" /></template>
+                </n-input>
+            </div>
+
+            <div class="sheet-content">
+                <div class="sheet-flow">
+                <template v-for="item in answerSheetItems" :key="item.key">
+                    <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
+                    
+                    <div v-else 
+                        class="number-circle" 
+                        :class="{ 'sheet-correct': item.status === 'correct', 'sheet-wrong': item.status === 'wrong', 'sheet-partial': item.status === 'partially-correct' }" 
+                        @click="() => { handleSheetJump(item.raw); mobileRightOpen = false; }">
+                        {{ item.globalIndex }}
+                    </div>
+                </template>
+                </div>
+            </div>
+       </n-drawer-content>
+    </n-drawer>
+
   </div>
 </template>
 
@@ -481,20 +573,18 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-radius: 20px; /* 大圆角 */
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* 更柔和的阴影 */
-  border: 1px solid #e2e8f0;
+  background-color: transparent;
+  /* Removed card styles for full screen flat layout */
 }
 
 .page-control-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 32px;
-  background-color: #fff;
-  border-bottom: 1px solid #f1f5f9;
+  padding: 12px 0; /*  Less padding, no horizontal padding to align with content if container has padding, or keep it */
+  margin-bottom: 0;
+  background-color: transparent; /* Transparent to blend */
+  border-bottom: none;
 }
 
 .left-controls {
@@ -519,6 +609,8 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 .main-layout-area {
   flex: 1;
   overflow: hidden;
+  /* Removed border radius and border for full screen flat layout */
+  background-color: #fff;
 }
 
 /* Auto Expand Sider Styles */
@@ -677,6 +769,57 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 @keyframes flash-bg {
     0% { background-color: rgba(37, 99, 235, 0.1); }
     100% { background-color: transparent; }
+}
+
+/* Mobile Floating Action Buttons */
+.mobile-fabs {
+    position: fixed;
+    bottom: 80px; 
+    left: 20px;
+    right: 20px;
+    height: 0; /* Just a container position reference */
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none; /* Let clicks pass through empty space */
+    z-index: 1000;
+}
+
+.fab-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto; /* Enable clicks on buttons */
+    transition: all 0.2s;
+    position: relative;
+    backdrop-filter: blur(4px);
+}
+
+.fab-btn:active {
+    transform: scale(0.92);
+}
+
+.fab-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background-color: #ef4444;
+    color: #fff;
+    font-size: 11px;
+    height: 18px;
+    min-width: 18px;
+    border-radius: 9px; /* Pill shape */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    border: 2px solid #fff;
+    font-weight: 700;
 }
 
 .content-layout {

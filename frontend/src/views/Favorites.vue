@@ -318,20 +318,16 @@ onMounted(() => { fetchBanks() })
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  background-color: transparent;
 }
 
 .page-control-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  background-color: #fff;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 0;
+  background-color: transparent;
+  border-bottom: none;
 }
 
 .left-controls, .right-controls {
@@ -351,7 +347,13 @@ onMounted(() => { fetchBanks() })
 
 .bank-selector { width: 150px; }
 .search-box { width: 200px; }
-.main-layout-area { flex: 1; overflow: hidden; }
+.main-layout-area { 
+  flex: 1; 
+  overflow: hidden; 
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background-color: #fff;
+}
 
 .fav-item-wrapper { margin-bottom: 30px; }
 .fav-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px; }

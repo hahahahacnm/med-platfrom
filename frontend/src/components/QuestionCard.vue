@@ -346,15 +346,6 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
                                       <span class="time"><n-time :time="new Date(n.created_at)" type="relative"/></span>
                                       <div v-if="!n.is_public" class="priv"><n-icon><LockClosedOutline/></n-icon></div>
                                   </div>
-                                  <div class="acts">
-                                      <n-button text size="tiny" class="ibtn like" :class="{liked:n.is_liked}" @click="handleLike(n)"><template #icon><n-icon><ThumbsUp v-if="n.is_liked"/><ThumbsUpOutline v-else/></n-icon></template>{{ n.like_count||'' }}</n-button>
-                                      <n-button text size="tiny" class="ibtn col" :class="{coled:n.is_collected}" @click="handleCollect(n)"><template #icon><n-icon><Star v-if="n.is_collected"/><StarOutline v-else/></n-icon></template></n-button>
-                                      <n-button text size="tiny" class="ibtn rep" @click="reply(n)"><template #icon><n-icon><ChatbubbleOutline/></n-icon></template></n-button>
-                                      <template v-if="canDelete(n)">
-                                          <n-popconfirm @positive-click="onAction('delete', n)"><template #trigger><n-button text size="tiny" class="ibtn del"><template #icon><n-icon><TrashOutline/></n-icon></template></n-button></template>确定删除？</n-popconfirm>
-                                      </template>
-                                      <n-dropdown trigger="click" :options="getOpts(n)" @select="(k) => onAction(k, n)"><n-button text size="tiny" class="ibtn more"><template #icon><n-icon><EllipsisVertical/></n-icon></template></n-button></n-dropdown>
-                                  </div>
                               </div>
                               <div v-if="n.parent" class="quote">
                                   <div class="q-head">回复 <span class="q-user">@{{ n.parent.user?.nickname || n.parent.user?.username }}</span> :</div>
@@ -363,6 +354,17 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
                               <div class="txt">{{ cleanTxt(n.content) }}</div>
                               <div v-if="getImages(n).length" class="imgs">
                                  <n-image v-for="(u, i) in getImages(n)" :key="i" :src="`http://localhost:8080${u}`" class="img" object-fit="cover" />
+                              </div>
+                              
+                              <!-- Actions Moved to Bottom -->
+                              <div class="acts">
+                                  <n-button text size="tiny" class="ibtn like" :class="{liked:n.is_liked}" @click="handleLike(n)"><template #icon><n-icon><ThumbsUp v-if="n.is_liked"/><ThumbsUpOutline v-else/></n-icon></template>{{ n.like_count||'' }}</n-button>
+                                  <n-button text size="tiny" class="ibtn col" :class="{coled:n.is_collected}" @click="handleCollect(n)"><template #icon><n-icon><Star v-if="n.is_collected"/><StarOutline v-else/></n-icon></template></n-button>
+                                  <n-button text size="tiny" class="ibtn rep" @click="reply(n)"><template #icon><n-icon><ChatbubbleOutline/></n-icon></template></n-button>
+                                  <template v-if="canDelete(n)">
+                                      <n-popconfirm @positive-click="onAction('delete', n)"><template #trigger><n-button text size="tiny" class="ibtn del"><template #icon><n-icon><TrashOutline/></n-icon></template></n-button></template>确定删除？</n-popconfirm>
+                                  </template>
+                                  <n-dropdown trigger="click" :options="getOpts(n)" @select="(k) => onAction(k, n)"><n-button text size="tiny" class="ibtn more"><template #icon><n-icon><EllipsisVertical/></n-icon></template></n-button></n-dropdown>
                               </div>
                           </div>
                       </div>
@@ -597,13 +599,14 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
 /* 当 hover body 时，由于 border 变色，三角也要变 */
 .body:hover::before { border-color: #e2e8f0; }
 
-.head-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; width: 100%; }
+.head-row { display: flex; align-items: center; margin-bottom: 8px; width: 100%; }
 .info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .name { font-weight: 600; color: #1e293b; font-size: 14px; }
 .time { color: #94a3b8; font-size: 12px; margin-left: 4px; }
 
-.acts { display: flex; align-items: center; gap: 8px; }
-.ibtn { font-size: 14px; color: #94a3b8; padding: 4px 6px; border-radius: 8px; transition: all 0.2s; }
+/* Acts moved to bottom - Desktop */
+.acts { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+.ibtn { font-size: 14px; color: #94a3b8; padding: 4px 8px; border-radius: 8px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
 .ibtn:hover { background-color: #f1f5f9; color: #475569; }
 .ibtn.like.liked { color: #f43f5e; } /* Rose color for like */
 .ibtn.col.coled { color: #f59e0b; }
@@ -639,4 +642,48 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
 .emoji:hover { background-color: #f1f5f9; transform: scale(1.1); }
 
 .load-more { text-align: center; margin-top: 24px; padding-bottom: 12px; }
-</style>
+ 
+ /* 📱 Mobile Optimizations */
+ @media (max-width: 768px) {
+    .scroll-anchor { scroll-margin-top: 60px; }
+    
+    .q-card {
+        margin-bottom: 16px; 
+        border-radius: 12px;
+    }
+
+    .ctx, .b1-ctx {
+        padding: 16px;
+        border-left-width: 3px;
+    }
+    
+    .notes-wrap {
+        padding: 16px;
+    }
+
+    .list { margin-top: 16px; }
+    
+    /* Comment Item Compact */
+    .item { gap: 10px; }
+    .avatar { padding-top: 0; }
+    .body {
+        padding: 12px;
+        border-radius: 12px;
+    }
+    .body::before { display: none; /* Hide triangle on mobile to save space/cleaner look */ }
+
+    .img { width: 80px; height: 80px; }
+    
+    /* Emoji Picker */
+    .emojis { width: 100%; max-width: 300px; }
+
+    /* Action Bar - wrap if needed or scale down */
+    .act-bar { flex-wrap: wrap; }
+    
+    /* Editor Toolbar Mobile */
+    .toolbar { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .toolbar .left, .toolbar .right { width: 100%; justify-content: space-between; }
+    .toolbar .right { margin-top: 4px; }
+    .privacy-toggle { flex: 1; justify-content: flex-start; } /* Make them take space but align left */
+ }
+ </style>
