@@ -197,7 +197,7 @@ onMounted(() => {
                         fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
                         class="user-avatar"
                       />
-                      <div class="status-badge"></div>
+                      <!-- <div class="status-badge"></div> Removed as requested -->
                 </div>
                 <div class="text-content">
                     <h2 class="greet-title">{{ greeting }}，{{ userStore.nickname || userStore.username }}</h2>
@@ -560,10 +560,10 @@ onMounted(() => {
 }
 .avatar-ring {
     position: relative;
-    padding: 4px;
-    background: #fff;
+    padding: 0;
+    
     border-radius: 50%;
-    box-shadow: 0 4px 15px rgba(32, 128, 240, 0.15);
+    /* box-shadow: 0 4px 15px rgba(32, 128, 240, 0.15); */
 }
 .status-badge {
     position: absolute;

@@ -218,7 +218,7 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
           </div>
           <div class="child-list">
              <div v-for="(c, i) in question.children" :key="c.id" :id="`question-anchor-${c.id}`" class="scroll-anchor" style="position: relative;">
-                <div class="idx-mark">Topic {{ c.displayIndex }}</div>
+                <div class="idx-mark">题目 {{ c.displayIndex }}</div>
                 <QuestionItem :question="c" :shared-options="opts" :index="i+1" is-child :show-shared-header="false" @answer-result="emit('answer-result', $event)" />
                 <n-divider v-if="i < question.children.length - 1" dashed style="margin: 0;" />
              </div>

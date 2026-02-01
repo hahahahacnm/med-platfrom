@@ -358,7 +358,8 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
                 </n-tooltip>
             </div>
             
-            <div class="sider-bank-select" style="padding: 0 16px 12px 16px; background: #fafafa; border-bottom: 1px solid #eee;">
+            <div class="sider-bank-select" style="padding: 0 16px 12px 16px; background: #fafafa; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 8px;">
+               <span style="font-size: 13px; color: #666; white-space: nowrap;">选择学科</span>
                <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="small">
                  <template #prefix><n-icon><LibraryOutline /></n-icon></template>
                </n-select>
@@ -400,7 +401,10 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
           
           <n-page-header v-else-if="currentCategory" :style="{ marginBottom: isMobile ? '12px' : '20px' }">
             <template #title>
-              <span style="font-size: 14px; color: #666;">{{ currentBank }} / </span> {{ currentCategory }}
+              <div style="font-size: 15px; font-weight: 600; color: #334155; display: flex; align-items: center; flex-wrap: wrap;">
+                  <span style="font-size: 13px; color: #94a3b8; margin-right: 6px;">{{ currentBank }} /</span> 
+                  <span>{{ currentCategory }}</span>
+              </div>
             </template>
             <template #extra>
               <div class="header-actions" style="display: flex; align-items: center; gap: 12px;">
@@ -436,7 +440,7 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
             <div v-else-if="!hasMore && visibleQuestions.length > 0">🎉 到底啦</div>
           </div>
           
-          <n-back-top :right="300" :bottom="50" />
+          <n-back-top :right="isMobile ? 20 : 40" :bottom="isMobile ? 140 : 40" />
         </n-layout-content>
 
         <!-- 🔥 RIGHT SIDER: ANSWER SHEET (Desktop) 🔥 -->
@@ -510,7 +514,8 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
     <!-- 📱 Mobile Left Drawer (Chapters) -->
     <n-drawer v-model:show="mobileLeftOpen" placement="left" width="100%">
        <n-drawer-content title="章节目录" closable>
-           <div class="sider-bank-select" style="padding: 0 0 16px 0; background: #fff; border-bottom: 1px dashed #eee;">
+           <div class="sider-bank-select" style="padding: 0 0 16px 0; background: #fff; border-bottom: 1px dashed #eee; display: flex; align-items: center; gap: 8px;">
+               <span style="font-size: 14px; color: #666; white-space: nowrap;">选择学科</span>
                <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" >
                  <template #prefix><n-icon><LibraryOutline /></n-icon></template>
                </n-select>
