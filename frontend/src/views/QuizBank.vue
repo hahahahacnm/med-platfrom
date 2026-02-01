@@ -6,10 +6,10 @@ import request from '../utils/request'
 import { 
   NLayout, NLayoutSider, NLayoutContent, 
   NTree, NSpin, NEmpty, NButton, NPageHeader, NTag,
-  NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect
+  NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect, NTooltip
 } from 'naive-ui'
 import { 
-  SearchOutline, LibraryOutline, HomeOutline
+  SearchOutline, LibraryOutline, HomeOutline, PushOutline, Push, MenuOutline, ListOutline
 } from '@vicons/ionicons5'
 import QuestionCard from '../components/QuestionCard.vue'
 
@@ -37,6 +37,30 @@ const loadTrigger = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 const globalQuestionCounter = ref(0) 
 const pagination = ref({ page: 1, pageSize: 200, itemCount: 0 })
+
+// 🔥 Sidebar Control States
+const leftCollapsed = ref(true)
+const leftPinned = ref(false)
+const rightCollapsed = ref(true)
+const rightPinned = ref(false)
+
+// Left Sidebar Logic
+const handleLeftEnter = () => { if (!leftPinned.value) leftCollapsed.value = false }
+const handleLeftLeave = () => { if (!leftPinned.value) leftCollapsed.value = true }
+const toggleLeftPin = () => { 
+    leftPinned.value = !leftPinned.value
+    if (leftPinned.value) leftCollapsed.value = false // Ensure expanded when pinned
+    else leftCollapsed.value = false // Keep expanded until mouse leave usually, or just let hover handle it
+}
+
+// Right Sidebar Logic
+const handleRightEnter = () => { if (!rightPinned.value) rightCollapsed.value = false }
+const handleRightLeave = () => { if (!rightPinned.value) rightCollapsed.value = true }
+const toggleRightPin = () => { 
+    rightPinned.value = !rightPinned.value
+    if (rightPinned.value) rightCollapsed.value = false 
+}
+
 
 // =======================
 // 2. 核心逻辑：数据适配与加载
@@ -275,11 +299,7 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
            题库练习
         </h2>
         
-        <div class="bank-selector">
-          <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="medium">
-            <template #prefix><n-icon><LibraryOutline /></n-icon></template>
-          </n-select>
-        </div>
+
       </div>
 
       <div class="search-box">
@@ -291,31 +311,63 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 
     <!-- Main Layout -->
     <n-layout has-sider class="main-layout-area">
+      
+      <!-- 🔥 LEFT SIDER: CHAPTERS 🔥 -->
       <n-layout-sider 
         bordered 
         collapse-mode="width" 
-        :collapsed-width="0" 
+        :collapsed-width="36" 
         :width="280" 
-        show-trigger="arrow-circle" 
-        content-style="padding: 12px;" 
+        :collapsed="leftCollapsed"
+        @mouseenter="handleLeftEnter"
+        @mouseleave="handleLeftLeave"
+        content-style="padding: 0; display: flex; flex-direction: column;" 
         :native-scrollbar="false"
-        class="category-sider"
+        class="category-sider auto-expand-sider"
       >
-        <n-spin :show="loadingTree">
-          <n-tree 
-            block-line 
-            expand-on-click 
-            :data="treeData" 
-            key-field="key" 
-            label-field="label" 
-            children-field="children" 
-            remote
-            :on-load="handleLoad"
-            @update:selected-keys="handleNodeClick" 
-          />
-        </n-spin>
-        <div v-if="treeData.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 13px;">
-            请先选择题库
+        <!-- Collapsed Strip -->
+        <div class="collapsed-strip" v-show="leftCollapsed">
+            <n-icon size="20" color="#999"><MenuOutline /></n-icon>
+        </div>
+
+        <!-- Expanded Content -->
+        <div class="expanded-content" v-show="!leftCollapsed">
+            <div class="sider-toolbar">
+                <span class="toolbar-title">章节目录</span>
+                <n-tooltip trigger="hover">
+                    <template #trigger>
+                        <n-button text size="small" @click="toggleLeftPin" :type="leftPinned ? 'primary' : 'default'">
+                            <template #icon><n-icon size="18"><component :is="leftPinned ? Push : PushOutline" /></n-icon></template>
+                        </n-button>
+                    </template>
+                    {{ leftPinned ? '取消固定' : '固定侧边栏' }}
+                </n-tooltip>
+            </div>
+            
+            <div class="sider-bank-select" style="padding: 0 16px 12px 16px; background: #fafafa; border-bottom: 1px solid #eee;">
+               <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="small">
+                 <template #prefix><n-icon><LibraryOutline /></n-icon></template>
+               </n-select>
+            </div>
+            
+            <div class="sider-scroll-area">
+                <n-spin :show="loadingTree">
+                <n-tree 
+                    block-line 
+                    expand-on-click 
+                    :data="treeData" 
+                    key-field="key" 
+                    label-field="label" 
+                    children-field="children" 
+                    remote
+                    :on-load="handleLoad"
+                    @update:selected-keys="handleNodeClick" 
+                />
+                </n-spin>
+                <div v-if="treeData.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 13px;">
+                    请先选择题库
+                </div>
+            </div>
         </div>
       </n-layout-sider>
 
@@ -360,30 +412,52 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
           <n-back-top :right="300" :bottom="50" />
         </n-layout-content>
 
+        <!-- 🔥 RIGHT SIDER: ANSWER SHEET 🔥 -->
         <n-layout-sider 
-          v-if="globalSheetItems.length > 0" 
+          v-if="globalSheetItems.length > 0 || rightPinned" 
           bordered 
           collapse-mode="width" 
-          :collapsed-width="0" 
+          :collapsed-width="36" 
           :width="260" 
-          show-trigger="arrow-circle" 
-          content-style="padding: 0; background-color: #fff;"
+          :collapsed="rightCollapsed"
+           @mouseenter="handleRightEnter"
+           @mouseleave="handleRightLeave"
+          content-style="padding: 0; background-color: #fff; display: flex; flex-direction: column;"
+          class="sheet-sider auto-expand-sider"
         >
-          <div class="sheet-header"><div class="sheet-title">📝 答题卡 ({{ globalSheetItems.length }})</div></div>
-          <div class="sheet-content">
-            <div class="sheet-flow">
-              <template v-for="item in answerSheetItems" :key="item.key">
-                <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
-                
-                <div v-else 
-                      class="number-circle" 
-                      :class="{ 'sheet-correct': item.status === 'correct', 'sheet-wrong': item.status === 'wrong', 'sheet-partial': item.status === 'partially-correct' }" 
-                      @click="handleSheetJump(item.raw)">
-                      {{ item.globalIndex }}
-                </div>
-              </template>
+             <!-- Collapsed Strip -->
+            <div class="collapsed-strip" v-show="rightCollapsed">
+               <n-icon size="20" color="#999"><ListOutline /></n-icon>
             </div>
-          </div>
+
+             <!-- Expanded Content -->
+             <div class="expanded-content" v-show="!rightCollapsed">
+                <div class="sheet-header">
+                    <div class="sheet-title">📝 答题卡 ({{ globalSheetItems.length }})</div>
+                    <n-tooltip trigger="hover">
+                        <template #trigger>
+                             <n-button text size="small" @click="toggleRightPin" :type="rightPinned ? 'primary' : 'default'">
+                                <template #icon><n-icon size="18"><component :is="rightPinned ? Push : PushOutline" /></n-icon></template>
+                            </n-button>
+                        </template>
+                         {{ rightPinned ? '取消固定' : '固定答题卡' }}
+                    </n-tooltip>
+                </div>
+                <div class="sheet-content">
+                    <div class="sheet-flow">
+                    <template v-for="item in answerSheetItems" :key="item.key">
+                        <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
+                        
+                        <div v-else 
+                            class="number-circle" 
+                            :class="{ 'sheet-correct': item.status === 'correct', 'sheet-wrong': item.status === 'wrong', 'sheet-partial': item.status === 'partially-correct' }" 
+                            @click="handleSheetJump(item.raw)">
+                            {{ item.globalIndex }}
+                        </div>
+                    </template>
+                    </div>
+                </div>
+             </div>
         </n-layout-sider>
       </n-layout>
     </n-layout>
@@ -391,6 +465,7 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 </template>
 
 <style scoped>
+/* Only showing new/modified styles */
 .quiz-container {
   height: 100%;
   display: flex;
@@ -439,10 +514,57 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
   overflow: hidden;
 }
 
+/* Auto Expand Sider Styles */
+.auto-expand-sider {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 50; /* Ensure it stays on top if we used absolute, but pushing is better */
+    position: relative;
+    /* We want the sider to physically expand, pushing content. 
+       If client wants OVERLAY, we'd enable position='absolute' on sider. 
+       For "Fixed" behavior, pushing is usually preferred. 
+       For "Auto-hide", floating might be better, but mixed mode is tricky in Naive Layout. 
+       Let's stick to standard flow first. */
+}
+
+.collapsed-strip {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    padding-top: 20px;
+    background: #fdfdfd;
+    cursor: pointer;
+}
+
+.expanded-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.sider-toolbar {
+    padding: 12px 16px 8px 16px;
+    /* border-bottom: 1px solid #eee; Moved to bank-select */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fafafa;
+}
+
+.toolbar-title { font-weight: bold; font-size: 14px; color: #333; }
+
+.sider-scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+
 /* Question List & Sheet Styles */
 .question-list { display: flex; flex-direction: column; padding-bottom: 20px; }
-.sheet-header { padding: 16px; border-bottom: 1px solid #f0f0f0; background-color: #fff; position: sticky; top: 0; z-index: 10; font-weight: bold; text-align: center; }
-.sheet-content { padding: 16px; }
+.sheet-header { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; background-color: #fafafa; display: flex; justify-content: space-between; align-items: center; }
+.sheet-title { font-weight: bold; font-size: 14px; }
+.sheet-content { padding: 16px; flex: 1; overflow-y: auto; }
 .sheet-flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .type-header { width: 100%; font-size: 12px; font-weight: bold; color: #999; margin-top: 10px; margin-bottom: 4px; display: flex; align-items: center; }
 .type-dot { width: 6px; height: 6px; background-color: #18a058; border-radius: 50%; margin-right: 6px; }

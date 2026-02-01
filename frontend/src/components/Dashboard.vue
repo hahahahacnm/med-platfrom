@@ -648,12 +648,12 @@ onMounted(() => {
 /* 4. Quick Actions Grid */
 .grid-actions {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
 }
 .action-card {
     position: relative;
-    padding: 24px;
+    padding: 16px;
     border-radius: var(--radius-box);
     cursor: pointer;
     overflow: hidden;

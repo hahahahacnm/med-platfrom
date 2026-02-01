@@ -166,7 +166,7 @@ onMounted(() => {
   border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  z-index: 20;
+  z-index: 100;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
