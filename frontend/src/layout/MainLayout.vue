@@ -167,38 +167,82 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   z-index: 20;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .desktop-sidebar {
-  width: 210px;
+  width: 68px; /* Collapsed width */
   position: fixed;
   top: 0;
   bottom: 0;
   left: 0;
 }
 
+.desktop-sidebar:hover {
+  width: 210px; /* Expanded width on hover */
+  box-shadow: 4px 0 24px rgba(0,0,0,0.08); /* Add shadow when expanded */
+}
+
+/* Ensure content pushes appropriately or stays put. 
+   Since it's a hover expansion, content staying at collapsed margin is usually better UX 
+   to avoid content jumping, allowing menu to overlay. */
+
 .logo-area {
-  padding: 20px;
+  padding: 20px 0; /* Adjusted padding */
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 0; /* Gap handled by logic/padding */
   border-bottom: 1px solid #f1f5f9;
+  height: 73px; /* Fixed height to match design */
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .logo-icon {
-  background-color: #2563eb; /* blue-600 */
+  background-color: #2563eb;
+  min-width: 68px; /* Center in collapsed width */
+  height: 32px;
+  background: none; /* Remove bg to look cleaner in collapsed or keep it? Original had blue bg box. Let's keep icon centered. */
+  /* Actually original had a box. Let's adjust to be centered properly */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Re-styling logo icon wrapper for the transition */
+.logo-icon {
+    min-width: 68px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.logo-icon .n-icon {
+  background-color: #2563eb;
   width: 32px;
   height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #fff;
 }
 
 .logo-text {
   font-size: 18px;
   font-weight: 500;
   color: #2563eb;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.desktop-sidebar:hover .logo-text {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .nav-menu {
@@ -208,22 +252,24 @@ onMounted(() => {
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 0; /* Gap reset */
+  padding: 8px 0; /* Vertical padding only, horizontal handled by min-width of icon */
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: #64748b; /* slate-500 */
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
-  background-color: #f1f5f9; /* slate-100 */
-  color: #0f172a; /* slate-900 */
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 .nav-item.active {
@@ -232,40 +278,73 @@ onMounted(() => {
   font-weight: 500;
 }
 
+/* Wrapper for icon to force it to be centered in the collapsed strip */
+.nav-icon {
+  min-width: 52px; /* 68px sidebar - padding? let's standardise */
+  /* The sidebar is 68px. The menu has padding 8px. So available width is 52px. */
+  min-width: 52px; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .nav-label {
   font-size: 14px;
   font-weight: 400;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+}
+
+.desktop-sidebar:hover .nav-label {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .user-profile-area {
-  padding: 12px;
-  margin: 12px;
+  padding: 12px 0;
+  margin: 12px 8px; /* Keep margin but ensure fit */
   border-top: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 0.2s;
+  overflow: hidden;
 }
 
 .user-profile-area:hover {
   background-color: #f8fafc;
 }
 
+.avatar-wrapper {
+  min-width: 52px; /* Center within the available 52px width (68 - 16 margin/padding) */
+  display: flex;
+  justify-content: center;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.desktop-sidebar:hover .user-info {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .user-name {
   font-size: 13px;
   font-weight: 500;
   color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .user-role {
@@ -273,7 +352,7 @@ onMounted(() => {
   color: #94a3b8;
 }
 
-/* Mobile Header */
+/* Mobile Header - Unchanged */
 .mobile-header {
   display: none;
   position: fixed;
@@ -337,11 +416,35 @@ onMounted(() => {
     margin: 0 0 12px 0;
     border: 1px solid #f1f5f9;
     background: #f8fafc;
+    /* Reset mobile profile card styles that might inherit from global classes */
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+/* Fix mobile profile card internals having opacity 0 due to shared class names */
+.mobile-profile-card .user-info {
+    opacity: 1 !important;
+    transform: none !important;
+    gap: 4px;
+}
+.mobile-profile-card .avatar-wrapper {
+    min-width: auto;
 }
 
 .mobile-item {
   padding: 12px;
+  /* Reset gap */
+  gap: 12px;
 }
+.mobile-item .nav-label {
+    opacity: 1 !important;
+    transform: none !important;
+}
+.mobile-item .nav-icon {
+    min-width: auto;
+}
+
 
 .logout-item {
   margin-top: 20px;
@@ -354,13 +457,14 @@ onMounted(() => {
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: 210px;
-  width: calc(100% - 210px);
-  padding: 0; /* Removed default padding for edge-to-edge design */
+  margin-left: 68px; /* Adjusted to match collapsed sidebar */
+  width: calc(100% - 68px); /* Full width based on new margin */
+  padding: 0; 
   height: 100vh;
   overflow-y: auto; 
   position: relative;
   box-sizing: border-box;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :global(body) {

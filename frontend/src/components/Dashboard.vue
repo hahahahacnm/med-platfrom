@@ -258,7 +258,7 @@ onMounted(() => {
                               <p>自由选择章节练习</p>
                           </div>
                       </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
+
                   </div>
                   
                   <div class="action-card" @click="router.push('/mistakes')">
@@ -269,7 +269,7 @@ onMounted(() => {
                               <p>精准复习薄弱点</p>
                           </div>
                       </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
+
                   </div>
 
                   <div class="action-card" @click="router.push('/favorites')">
@@ -280,7 +280,7 @@ onMounted(() => {
                               <p>重难点考题回顾</p>
                           </div>
                       </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
+
                   </div>
 
                   <div class="action-card" @click="router.push('/my-notes')">
@@ -291,7 +291,7 @@ onMounted(() => {
                               <p>沉淀个人知识库</p>
                           </div>
                       </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
+
                   </div>
               </div>
           </div>
