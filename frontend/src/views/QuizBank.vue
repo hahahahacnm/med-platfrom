@@ -507,7 +507,7 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
        </div>
        <div class="fab-btn right-fab" @click="mobileRightOpen = true" v-if="globalSheetItems.length > 0">
           <n-icon size="24" color="#fff"><ListOutline /></n-icon>
-          <div class="fab-badge" v-if="globalSheetItems.length">{{ globalSheetItems.length }}</div>
+          <!-- Badge removed as requested -->
        </div>
     </div>
 
