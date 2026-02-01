@@ -170,7 +170,7 @@ onMounted(() => {
 }
 
 .desktop-sidebar {
-  width: 250px;
+  width: 210px;
   position: fixed;
   top: 0;
   bottom: 0;
@@ -178,7 +178,7 @@ onMounted(() => {
 }
 
 .logo-area {
-  padding: 24px;
+  padding: 20px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -187,8 +187,8 @@ onMounted(() => {
 
 .logo-icon {
   background-color: #2563eb; /* blue-600 */
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -196,26 +196,26 @@ onMounted(() => {
 }
 
 .logo-text {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 500;
   color: #2563eb;
 }
 
 .nav-menu {
   flex: 1;
-  padding: 16px;
+  padding: 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   overflow-y: auto;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: #64748b; /* slate-500 */
@@ -227,25 +227,25 @@ onMounted(() => {
 }
 
 .nav-item.active {
-  background-color: #2563eb;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .nav-label {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .user-profile-area {
-  padding: 16px;
-  margin: 16px;
+  padding: 12px;
+  margin: 12px;
   border-top: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: 8px;
   transition: background-color 0.2s;
 }
 
@@ -260,8 +260,8 @@ onMounted(() => {
 }
 
 .user-name {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
   white-space: nowrap;
   overflow: hidden;
@@ -354,8 +354,8 @@ onMounted(() => {
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: 250px;
-  width: calc(100% - 250px);
+  margin-left: 210px;
+  width: calc(100% - 210px);
   padding: 0; /* Removed default padding for edge-to-edge design */
   height: 100vh;
   overflow-y: auto; 

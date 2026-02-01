@@ -16,3 +16,5 @@ go run cmd/api/main.go
 数据库
 密码：asdfghjkl;'
 
+
+Start-Service postgresql-x64-18

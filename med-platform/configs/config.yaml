@@ -9,7 +9,7 @@ log:
 data:
   database:
     driver: postgres
-    source: "host=localhost user=postgres password=asdfghjkl dbname=med_platform port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+    source: "host=localhost user=postgres password=asdfghjkl;' dbname=med_platform port=5432 sslmode=disable TimeZone=Asia/Shanghai"
 
 jwt:
   secret: "243658cjh" # 生产环境这个要很复杂
