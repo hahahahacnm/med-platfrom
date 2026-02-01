@@ -9,7 +9,7 @@ import {
   NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect, NTooltip
 } from 'naive-ui'
 import { 
-  SearchOutline, LibraryOutline, HomeOutline, PushOutline, Push, MenuOutline, ListOutline
+  SearchOutline, LibraryOutline, HomeOutline, PushOutline, Push, MenuOutline, ListOutline, RefreshOutline
 } from '@vicons/ionicons5'
 import QuestionCard from '../components/QuestionCard.vue'
 
@@ -380,13 +380,21 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
               <span style="font-size: 14px; color: #666;">{{ currentBank }} / </span> {{ currentCategory }}
             </template>
             <template #extra>
-              <n-space>
+              <div class="header-actions" style="display: flex; align-items: center; gap: 12px;">
+                <n-tag :bordered="false" type="default" size="medium" style="background: transparent; font-weight: 500; color: #64748b;">
+                   共 <span style="font-weight: 700; color: #0f172a; margin: 0 2px;">{{ pagination.itemCount }}</span> 道题目
+                </n-tag>
+                <div style="width: 1px; height: 16px; background: #e2e8f0;"></div>
                 <n-popconfirm @positive-click="handleResetChapter">
-                  <template #trigger><n-button size="small" type="warning" ghost>重做本章</n-button></template>
-                  确定清空记录吗？
+                  <template #trigger>
+                    <n-button size="small" type="error" dashed>
+                        <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                        重做本章
+                    </n-button>
+                  </template>
+                  确定要清空本章的所有答题记录吗？这将无法恢复。
                 </n-popconfirm>
-                <n-tag type="primary" size="small" round>共 {{ pagination.itemCount }} 大题</n-tag>
-              </n-space>
+              </div>
             </template>
           </n-page-header>
           
