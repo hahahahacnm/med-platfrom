@@ -11,9 +11,9 @@ const { message, dialog } = createDiscreteApi(['message', 'dialog'])
 // 2. 创建 axios 实例
 const service = axios.create({
   // 配合 vite.config.ts 的 proxy
-  baseURL: '/api/v1', 
+  baseURL: '/api/v1',
   // 建议改长一点，题库导入导出或大列表查询可能耗时
-  timeout: 15000 
+  timeout: 15000
 })
 
 // 3. 请求拦截器
@@ -46,15 +46,19 @@ service.interceptors.response.use(
 
     // --- A. Token 过期 / 未登录 (401) ---
     if (status === 401) {
-      message.warning('登录状态已过期，请重新登录')
-      const userStore = useUserStore()
-      userStore.logout() // 假设 store 里有清除状态的方法
-      // 使用 replace 跳转，防止用户点后退按钮死循环
-      setTimeout(() => {
-        window.location.href = '/login'
-      }, 1000)
-    } 
-    
+      // 如果是在登录页（登录失败），不进行跳转逻辑
+      if (!window.location.pathname.includes('/login')) {
+        message.warning('登录状态已过期，请重新登录')
+        const userStore = useUserStore()
+        userStore.logout()
+        setTimeout(() => {
+          window.location.href = '/login'
+        }, 1000)
+      } else {
+        message.error(errorMsg)
+      }
+    }
+
     // --- B. 权限不足 (403) - 配合后端 checkAccess 使用 ---
     else if (status === 403) {
       // 使用 Dialog 模态框，比 Message 更醒目，强制用户看到
@@ -80,7 +84,7 @@ service.interceptors.response.use(
     else if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       message.error('请求超时，请检查网络')
     }
-    
+
     // --- F. 其他错误 ---
     else {
       message.error(errorMsg)

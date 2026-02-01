@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage, NIcon } from 'naive-ui'
 import { 
@@ -36,6 +36,25 @@ const model = reactive({
   invitationCode: '' // 🔥 新增字段
 })
 
+const captchaId = ref('')
+const captchaImg = ref('')
+const captchaVal = ref('')
+
+const fetchCaptcha = async () => {
+  try {
+    const res: any = await request.get('/auth/captcha')
+    captchaId.value = res.id
+    captchaImg.value = res.image
+  } catch (e) { 
+    // Is request fails, fail silently or log
+    console.error(e) 
+  }
+}
+
+onMounted(() => {
+    fetchCaptcha()
+})
+
 const handleRegister = async () => {
   if (!hasAgreed.value) {
     message.warning('请先阅读并同意用户协议等条款')
@@ -45,6 +64,11 @@ const handleRegister = async () => {
   // Basic validation
   if (!model.username || !model.nickname || !model.password || !model.confirmPassword) {
     message.warning('请填写所有必填项')
+    return
+  }
+
+  if (!captchaVal.value) {
+    message.warning('请输入验证码')
     return
   }
   
@@ -65,7 +89,9 @@ const handleRegister = async () => {
       username: model.username,
       password: model.password,
       nickname: model.nickname,
-      invitation_code: model.invitationCode // 🔥 发送邀请码
+      invitation_code: model.invitationCode, // 🔥 发送邀请码
+      captcha_id: captchaId.value,
+      captcha_val: captchaVal.value
     })
     
     message.success('注册成功！请登录')
@@ -244,6 +270,26 @@ const agreeDocument = () => {
                 class="custom-input"
                 @keydown.enter="handleRegister"
               />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>图形验证码</label>
+            <div style="display: flex; gap: 10px;">
+                <div class="input-wrapper group-focus" style="flex: 1;">
+                    <input 
+                        v-model="captchaVal" 
+                        type="text" 
+                        placeholder="输入验证码" 
+                        class="custom-input"
+                        style="padding-left: 1rem;" 
+                    />
+                </div>
+                <!-- 验证码图片区 -->
+                <div style="width: 100px; height: 38px; cursor: pointer; border-radius: 0.625rem; overflow: hidden; border: 1px solid #e2e8f0; display: flex;" @click="fetchCaptcha" title="点击刷新">
+                    <img v-if="captchaImg" :src="captchaImg" style="width: 100%; height: 100%; object-fit: fill;" />
+                    <div v-else style="width: 100%; width: 100%; background: #f1f5f9;"></div>
+                </div>
             </div>
           </div>
 
@@ -466,8 +512,8 @@ const agreeDocument = () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 1.5rem;
+  justify-content: flex-start; /* Changed from center to move it up */
+  padding: 6vh 1.5rem 1.5rem 1.5rem; /* Added top padding */
   background-color: white;
   overflow-y: auto;
   position: relative;
@@ -519,7 +565,7 @@ const agreeDocument = () => {
 }
 
 .form-wrapper {
-  max-width: 28rem; /* max-w-md */
+  max-width: 26rem; /* Reduced from 28rem */
   width: 100%;
   margin: 0 auto;
 }
@@ -528,14 +574,14 @@ const agreeDocument = () => {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem; /* Further reduced from 0.75rem */
 }
 
 .form-title {
   font-size: 1.5rem; /* text-2xl */
   font-weight: 700;
   color: #0f172a;
-  margin: 0 0 0.25rem 0;
+  margin: 0; 
 }
 
 @media (min-width: 768px) {
@@ -545,19 +591,19 @@ const agreeDocument = () => {
 }
 
 .form-subtitle {
-  font-size: 0.875rem; /* text-sm */
+  font-size: 0.75rem; /* Reduced text size */
   color: #64748b; /* slate-500 */
   margin: 0;
 }
 
 .toggle-auth-btn {
-  font-size: 0.875rem; /* text-sm */
+  font-size: 0.75rem; /* Reduced */
   font-weight: 700;
   color: #2563eb;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0.375rem 0.75rem;
+  padding: 0.25rem 0.5rem; /* Reduced padding */
   border-radius: 0.5rem;
   transition: all 0.2s;
 }
@@ -570,13 +616,13 @@ const agreeDocument = () => {
 .form-content {
   display: flex;
   flex-direction: column;
-  gap: 1rem; /* space-y-3 */
+  gap: 0.625rem; /* Further reduced from 0.75rem */
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0; /* Tighten label-input gap */
 }
 
 .form-group label {
@@ -584,6 +630,7 @@ const agreeDocument = () => {
   font-weight: 700;
   color: #334155; /* slate-700 */
   margin-left: 0.25rem;
+  margin-bottom: 2px;
 }
 
 .input-wrapper {
@@ -609,8 +656,8 @@ const agreeDocument = () => {
   width: 100%;
   background-color: #f8fafc; /* slate-50 */
   border: 1px solid #e2e8f0; /* slate-200 */
-  border-radius: 0.75rem; /* rounded-xl */
-  padding: 0.625rem 1rem 0.625rem 2.5rem; /* py-2.5 pl-10 */
+  border-radius: 0.625rem; /* Reduced radius */
+  padding: 0.45rem 1rem 0.45rem 2.5rem; /* Further reduced vertical padding */
   font-size: 0.875rem; /* text-sm */
   font-weight: 500;
   color: #1e293b; /* slate-800 */

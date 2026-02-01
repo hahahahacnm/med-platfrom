@@ -38,6 +38,7 @@ func SetupRouter() *gin.Engine {
 		// 🟢 公共区
 		api.POST("/auth/register", userHandler.Register)
 		api.POST("/auth/login", userHandler.Login)
+		api.GET("/auth/captcha", userHandler.GetCaptcha) // 🔥 Captcha
 		api.GET("/category-tree", questionHandler.GetTree)
 		api.GET("/payment/mock/callback", paymentHandler.MockSuccess)
 
@@ -69,7 +70,7 @@ func SetupRouter() *gin.Engine {
 			// 个人
 			userGroup.GET("/user/profile", userHandler.GetProfile)
 			userGroup.PUT("/user/profile", userHandler.UpdateProfile)
-			userGroup.POST("/user/avatar", userHandler.UploadAvatar) 
+			userGroup.POST("/user/avatar", userHandler.UploadAvatar)
 			userGroup.PUT("/user/password", userHandler.ChangePassword)
 
 			// 题目
@@ -112,18 +113,18 @@ func SetupRouter() *gin.Engine {
 			// ============================================================
 			// 🔴 后台管理区
 			// ============================================================
-			
+
 			// 1️⃣ 员工组
 			staffGroup := userGroup.Group("/admin")
 			staffGroup.Use(middleware.RequireStaff())
 			{
-				staffGroup.GET("/products", productHandler.ListProducts) 
-				staffGroup.POST("/products/bind", productHandler.BindContent) 
+				staffGroup.GET("/products", productHandler.ListProducts)
+				staffGroup.POST("/products/bind", productHandler.BindContent)
 				staffGroup.POST("/products/unbind", productHandler.UnbindContent)
 				staffGroup.POST("/users/grant", productHandler.GrantProductToUser)
 				staffGroup.POST("/users/revoke", productHandler.RevokeUserProduct)
-				
-				staffGroup.GET("/users", userHandler.ListUsers) 
+
+				staffGroup.GET("/users", userHandler.ListUsers)
 				staffGroup.GET("/users/:id", userHandler.AdminGetUserDetail)
 				staffGroup.GET("/users/:id/products", productHandler.GetUserProducts)
 				staffGroup.GET("/auth-logs", productHandler.GetAuthLogs)
@@ -134,11 +135,11 @@ func SetupRouter() *gin.Engine {
 				staffGroup.GET("/forum/comments", forumHandler.AdminListComments)
 				staffGroup.DELETE("/forum/comments/:id", forumHandler.DeleteComment)
 				staffGroup.DELETE("/forum/posts/:id", forumHandler.DeletePost)
-				
+
 				staffGroup.GET("/forum/reports", forumHandler.AdminListReports)
 				staffGroup.GET("/forum/reports/preview", forumHandler.AdminGetReportContent)
 				staffGroup.PUT("/forum/reports/:id/resolve", forumHandler.AdminResolveReport)
-				
+
 				staffGroup.GET("/notes", noteHandler.AdminListNotes)
 				staffGroup.POST("/notes/:id/ignore", noteHandler.AdminDismissReport)
 
@@ -148,13 +149,13 @@ func SetupRouter() *gin.Engine {
 				staffGroup.PUT("/platform-feedbacks/:id", feedbackHandler.AdminReply)
 
 				// 2️⃣ 超级管理员组
-				superGroup := staffGroup.Group("/") 
+				superGroup := staffGroup.Group("/")
 				superGroup.Use(middleware.RequireSuperAdmin())
 				{
-					superGroup.POST("/users/role", userHandler.UpdateRole) 
+					superGroup.POST("/users/role", userHandler.UpdateRole)
 					superGroup.POST("/users/ban", userHandler.BanUser)
 					superGroup.POST("/users/unban", userHandler.UnbanUser)
-					
+
 					superGroup.PUT("/users/:id", userHandler.AdminUpdateUserInfo)
 					superGroup.PUT("/users/:id/password", userHandler.AdminResetPassword)
 					superGroup.POST("/users/:id/avatar", userHandler.AdminUploadAvatar)
@@ -180,7 +181,7 @@ func SetupRouter() *gin.Engine {
 					superGroup.DELETE("/forum/boards/:id", forumHandler.DeleteBoard)
 
 					superGroup.POST("/withdraw/handle", userHandler.HandleWithdraw)
-					
+
 					// 🔥🔥🔥 [新增] 删除接口 🔥🔥🔥
 					superGroup.DELETE("/withdraw/:id", userHandler.DeleteWithdraw)
 					superGroup.DELETE("/withdraw/clear", userHandler.ClearHandledWithdraws)

@@ -12,6 +12,7 @@ import {
 import { useMessage, NIcon } from 'naive-ui'
 import { useUserStore } from '../stores/user'
 import { useRouter } from 'vue-router'
+import request from '../utils/request'
 
 const userStore = useUserStore()
 const router = useRouter()
@@ -26,27 +27,67 @@ const formModel = ref({
 const loading = ref(false)
 const showPassword = ref(false)
 
+const requireCaptcha = ref(false)
+const captchaId = ref('')
+const captchaImg = ref('')
+const captchaVal = ref('')
+
+const fetchCaptcha = async () => {
+  try {
+    const res: any = await request.get('/auth/captcha')
+    captchaId.value = res.id
+    captchaImg.value = res.image
+  } catch (e) {
+    console.error(e)
+  }
+}
+
 const handleLogin = async () => {
   if (!formModel.value.username || !formModel.value.password) {
     message.warning('请输入账号和密码')
+    return
+  }
+  
+  if (requireCaptcha.value && !captchaVal.value) {
+    message.warning('请输入验证码')
     return
   }
 
   loading.value = true
   
   try {
-    const success = await userStore.login(formModel.value)
-    if (success) {
-      message.success('登录成功！')
-      const role = localStorage.getItem('role')
-      if (role === 'admin' || role === 'agent') {
-        router.push('/admin')
-      } else {
-        router.push('/')
-      }
+    const success = await userStore.login({
+        ...formModel.value,
+        captcha_id: requireCaptcha.value ? captchaId.value : undefined,
+        captcha_val: requireCaptcha.value ? captchaVal.value : undefined
+    })
+    
+    // login throws if failed, so here is success
+    message.success('登录成功！')
+    const role = localStorage.getItem('role')
+    if (role === 'admin' || role === 'agent') {
+      router.push('/admin')
+    } else {
+      router.push('/')
     }
-  } catch (e) {
-    // Error handling handled by store/request or simple catch
+
+  } catch (e: any) {
+    // Check if captcha is required
+    if (e.response && e.response.data && e.response.data.require_captcha) {
+        if (!requireCaptcha.value) {
+            message.info('由于多次尝试失败，请进行安全验证')
+        }
+        requireCaptcha.value = true
+        fetchCaptcha()
+        // Clear captcha val if specific error? or keep it
+        captchaVal.value = ''
+    } else {
+        // Other errors handled by interceptor but we might want to refresh captcha if it was wrong
+        if (requireCaptcha.value) {
+           captchaVal.value = ''
+           fetchCaptcha()
+        }
+    }
   } finally {
     loading.value = false
   }
@@ -160,6 +201,18 @@ const handleLogin = async () => {
                   <EyeOffOutline v-else />
                 </n-icon>
               </button>
+            </div>
+          </div>
+
+          <div class="form-group" v-if="requireCaptcha">
+            <label>安全验证</label>
+            <div style="display: flex; gap: 10px;">
+                <div class="input-wrapper group-focus" style="flex: 1;">
+                    <input v-model="captchaVal" type="text" placeholder="输入验证码" class="custom-input" @keydown.enter="handleLogin" />
+                </div>
+                <div style="width: 100px; height: 38px; cursor: pointer; border-radius: 0.75rem; overflow: hidden; border: 1px solid #e2e8f0; display: flex;" @click="fetchCaptcha">
+                    <img v-if="captchaImg" :src="captchaImg" style="width: 100%; height: 100%; object-fit: fill;" />
+                </div>
             </div>
           </div>
 
