@@ -219,31 +219,6 @@ onMounted(() => { fetchBanks() })
 
 <template>
   <div class="mistakes-container">
-    <div class="page-control-bar">
-      <div class="left-controls">
-        <h2 class="page-title">
-          <n-icon color="#d03050" style="margin-right: 8px; vertical-align: bottom;"><BookOutline /></n-icon>
-          我的错题本
-        </h2>
-        <div class="bank-selector">
-          <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
-        </div>
-      </div>
-      
-      <div class="right-controls">
-        <n-checkbox v-model:checked="autoRemove">
-          <span style="font-size: 13px; font-weight: 500; color: #666;">答对自动移除</span>
-        </n-checkbox>
-        
-        <div class="search-box">
-          <n-input v-model:value="filter.keyword" placeholder="搜索关键词..." size="small" @keydown.enter="handleSearch" clearable>
-            <template #prefix><n-icon><SearchOutline /></n-icon></template>
-          </n-input>
-        </div>
-        <n-button type="primary" size="small" secondary @click="handleSearch">搜索</n-button>
-      </div>
-    </div>
-
     <n-layout has-sider class="main-layout-area">
       <n-layout-sider 
         bordered 
@@ -251,14 +226,42 @@ onMounted(() => { fetchBanks() })
         :collapsed-width="0" 
         :width="260" 
         show-trigger="arrow-circle" 
-        content-style="padding: 12px;" 
+        content-style="padding: 16px; display: flex; flex-direction: column;" 
         style="background-color: #fafafa;"
       >
-        <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+        <!-- 侧边栏头部控制区 -->
+        <div class="sider-controls">
+            <div class="page-title-row">
+                <n-icon color="#d03050" size="20"><BookOutline /></n-icon>
+                <span class="sb-title">我的错题本</span>
+            </div>
+
+            <div class="control-item">
+                <div class="label-text">当前题库</div>
+                <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
+            </div>
+
+            <div class="control-item">
+                <div class="label-text">搜索题目</div>
+                <n-input v-model:value="filter.keyword" placeholder="关键词..." size="small" @keydown.enter="handleSearch" clearable>
+                    <template #prefix><n-icon><SearchOutline /></n-icon></template>
+                </n-input>
+            </div>
+
+            <div class="control-item">
+                <n-checkbox v-model:checked="autoRemove">
+                    <span style="font-size: 13px; color: #666;">答对自动移除</span>
+                </n-checkbox>
+            </div>
+        </div>
+
+        <n-divider style="margin: 16px 0;" />
+
+        <div style="font-weight: bold; color: #333; margin-bottom: 12px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
           <n-icon color="#d03050"><FilterOutline /></n-icon> 错题分布 ({{ pagination.itemCount }})
         </div>
         
-        <n-spin :show="loadingTree">
+        <n-spin :show="loadingTree" style="flex: 1; overflow-y: auto;">
           <n-tree
             block-line
             expand-on-click
@@ -277,7 +280,7 @@ onMounted(() => { fetchBanks() })
         </n-spin>
       </n-layout-sider>
 
-      <n-layout-content content-style="padding: 24px; max-width: 960px; margin: 0 auto;" :native-scrollbar="true">
+      <n-layout-content content-style="padding: 24px; margin: 0 auto; width: 100%;" :native-scrollbar="true">
         
         <div v-if="filter.category" style="margin-bottom: 16px;">
             <n-tag closable type="warning" @close="filter.category = ''; fetchData()">
@@ -347,40 +350,18 @@ onMounted(() => { fetchBanks() })
   background-color: transparent;
 }
 
-.page-control-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  margin-bottom: 0;
-  background-color: transparent;
-  border-bottom: none;
-}
-
-.left-controls, .right-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.page-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0;
-  display: flex;
-  align-items: center;
-}
-
-.bank-selector { width: 150px; }
-.search-box { width: 200px; }
 .main-layout-area { 
   flex: 1; 
   overflow: hidden; 
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-  background-color: #fff; /* Ensure white background for the content area */
+  /* Flat Design */
+  background-color: #fff; 
 }
+
+/* Sidebar Controls */
+.sider-controls { display: flex; flex-direction: column; gap: 16px; }
+.page-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #1e293b; font-weight: 700; font-size: 18px; }
+.control-item { display: flex; flex-direction: column; gap: 6px; }
+.label-text { font-size: 12px; color: #64748b; font-weight: 500; }
 
 .mistake-item-wrapper { margin-bottom: 30px; }
 .mistake-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px; }
