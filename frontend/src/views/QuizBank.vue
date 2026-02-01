@@ -132,6 +132,13 @@ const handleBankChange = (val: string) => {
     currentBank.value = val
     resetState()
     treeData.value = []
+    
+    // Auto-pin sidebar on bank change (no category selected)
+    if (!isMobile.value) {
+        leftPinned.value = true
+        leftCollapsed.value = false
+    }
+
     fetchTreeRoot() 
 }
 
@@ -140,6 +147,14 @@ const handleNodeClick = (keys: any, option: any) => {
   const node = option[0]
   resetState()
   currentCategory.value = node.full || node.label 
+  
+  // Auto-unpin and collapse when category selected
+  if (!isMobile.value) {
+      leftPinned.value = false
+      // We don't force collapse here immediately as mouse is likely over it,
+      // let handleLeftLeave take care of it when user moves mouse away.
+  }
+
   fetchQuestions(false) 
 
   // Force expand on click
@@ -313,7 +328,14 @@ onMounted(async () => {
     checkMobile()
     window.addEventListener('resize', checkMobile)
     await fetchBanks(); 
-    if (currentBank.value) fetchTreeRoot(); 
+    if (currentBank.value) {
+        fetchTreeRoot();
+        // Auto-pin on initial load if no category
+        if (!isMobile.value && !currentCategory.value) {
+            leftPinned.value = true
+            leftCollapsed.value = false
+        }
+    }
     nextTick(() => { setupIntersectionObserver() }) 
 })
 

@@ -192,18 +192,20 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
       </div>
     </div>
 
+    <!-- 🌟 Header Row for Meta Info & Actions -->
+    <div class="q-header-row" v-if="showTypeTag || isMultiChoice || result">
+        <div class="left-badges">
+            <n-tag v-if="showTypeTag" :type="tagTypeComputed" size="small" round strong>{{ question.type || '题型' }}</n-tag>
+            <n-tag v-if="isMultiChoice" type="warning" size="small">多选</n-tag>
+        </div>
+        
+        <div v-if="result" class="redo-btn" @click.stop="handleRedo">
+            <n-icon size="14"><RefreshOutline /></n-icon> 重做
+        </div>
+    </div>
+
     <div class="q-stem">
-      <!-- 浮动在右侧的重做按钮 -->
-      <div v-if="result" class="redo-btn" @click.stop="handleRedo">
-          <n-icon size="14"><RefreshOutline /></n-icon> 重做
-      </div>
-
-      <!-- 题型标签 & 序号 -->
-      <n-tag v-if="showTypeTag" :type="tagTypeComputed" size="small" round strong style="margin-right: 6px; vertical-align: text-bottom;">{{ question.type || '题型' }}</n-tag>
-
       <span class="q-index">{{ indexLabel }}</span>
-      <n-tag v-if="isMultiChoice" type="warning" size="small" style="margin-right: 6px; vertical-align: text-bottom;">多选</n-tag>
-      
       <span class="q-text" v-html="formatText(question.stem)"></span>
     </div>
 
@@ -356,12 +358,27 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
     color: #3b82f6; 
     font-size: 18px;
 }
+
+/* 🏷️ 头部标签行 */
+.q-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    height: 28px; /* Fixed height for consistency */
+}
+.left-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .redo-btn { 
-    float: right; 
+    /* float: right; Removed float */
     font-size: 12px; 
     color: #64748b; 
     cursor: pointer; 
-    margin-left: 12px; 
+    /* margin-left: 12px; */
     transition: all 0.2s;
     background-color: #f1f5f9;
     padding: 4px 10px;
