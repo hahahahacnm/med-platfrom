@@ -10,6 +10,7 @@ const props = defineProps<{
   index?: number    
   isChild?: boolean 
   showSharedHeader?: boolean 
+  showTypeTag?: boolean
 }>()
 
 const emit = defineEmits(['answer-result'])
@@ -84,6 +85,14 @@ const indexLabel = computed(() => {
     return `(${props.index})`
   }
   return `${props.index}.`
+})
+
+const tagTypeComputed = computed(() => {
+    const t = props.question.type || ''
+    if (!t) return 'default'
+    if (t.includes('A3') || t.includes('A4') || t.includes('案例')) return 'info'
+    if (t.includes('B1')) return 'warning'
+    return 'success' 
 })
 
 const handleRedo = async () => {
@@ -184,11 +193,17 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
     </div>
 
     <div class="q-stem">
-      <span class="q-index">{{ indexLabel }}</span>
-      <n-tag v-if="isMultiChoice" type="warning" size="small" style="margin-right: 6px; vertical-align: text-bottom;">多选</n-tag>
+      <!-- 浮动在右侧的重做按钮 -->
       <div v-if="result" class="redo-btn" @click.stop="handleRedo">
           <n-icon size="14"><RefreshOutline /></n-icon> 重做
       </div>
+
+      <!-- 题型标签 & 序号 -->
+      <n-tag v-if="showTypeTag" :type="tagTypeComputed" size="small" round strong style="margin-right: 6px; vertical-align: text-bottom;">{{ question.type || '题型' }}</n-tag>
+
+      <span class="q-index">{{ indexLabel }}</span>
+      <n-tag v-if="isMultiChoice" type="warning" size="small" style="margin-right: 6px; vertical-align: text-bottom;">多选</n-tag>
+      
       <span class="q-text" v-html="formatText(question.stem)"></span>
     </div>
 

@@ -195,15 +195,14 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
 
 <template>
   <div :id="`question-anchor-${question.id}`" class="scroll-anchor">
-    <n-card class="q-card" hoverable content-style="padding-bottom: 0;">
-      <template #header>
-        <div class="head">
-          <n-tag :type="tagType(question.type)" size="small" strong round>{{ question.type || '题型' }}</n-tag>
-          <span v-if="hasChild" class="sub">(共 {{ question.children.length }} 小题)</span>
-        </div>
-      </template>
-
-      <div v-if="hasChild">
+    <n-card class="q-card" hoverable content-style="padding: 0;">
+      <!-- Header Removed, content moved inside QuestionItem for compact layout -->
+      
+      <div v-if="hasChild" class="q-main-content">
+          <div class="head" style="margin-bottom: 12px;">
+             <n-tag :type="tagType(question.type)" size="small" strong round>{{ question.type || '题型' }}</n-tag>
+             <span class="sub">(共 {{ question.children.length }} 小题)</span>
+          </div>
           <div v-if="question.stem && !question.type.includes('B1')" class="ctx">
              <div class="ctx-h">（主题干）</div> 
              <div class="ctx-c" v-html="fmtStem(question.stem)"></div>
@@ -225,8 +224,9 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
              </div>
           </div>
       </div>
-      <div v-else>
-        <QuestionItem :question="question" :index="serialNumber" :is-child="false" @answer-result="emit('answer-result', $event)" />
+      <div v-else class="q-main-content">
+        <!-- Single Question Mode -->
+        <QuestionItem :question="question" :index="serialNumber" :is-child="false" :show-type-tag="true" @answer-result="emit('answer-result', $event)" />
       </div>
 
       <template #action>
@@ -319,7 +319,6 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
           </div>
           
           <div class="sort-bar" v-if="notesList.length > 0">
-              <span class="sort-label">排序：</span>
               <span class="sort-item" :class="{active: noteSort === 'hot'}" @click="noteSort !== 'hot' && toggleSort()">
                   <n-icon class="ico"><FlameOutline/></n-icon> 最热
               </span>
@@ -643,9 +642,13 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
 
 .load-more { text-align: center; margin-top: 24px; padding-bottom: 12px; }
  
+ .q-main-content { padding: 20px 24px; }
+
  /* 📱 Mobile Optimizations */
  @media (max-width: 768px) {
     .scroll-anchor { scroll-margin-top: 60px; }
+    
+    .q-main-content { padding: 16px; }
     
     .q-card {
         margin-bottom: 16px; 
@@ -657,6 +660,11 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
         border-left-width: 3px;
     }
     
+    /* Handle the padding for the question body */
+    .q-body-padded {
+        padding: 16px !important;
+    }
+
     .notes-wrap {
         padding: 16px;
     }
