@@ -3,7 +3,7 @@ import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
   NCard, NIcon, NSkeleton, NAvatar, NTag, NTooltip, NCollapse, NCollapseItem, NEmpty,
-  NNumberAnimation, NButton, NModal, NSpin, NList, NListItem, NText, useMessage
+  NNumberAnimation, NButton, NModal, NSpin, NList, NListItem, NText, useMessage, NProgress
 } from 'naive-ui'
 import { 
   ArrowForwardOutline, BookOutline, StarOutline, JournalOutline,

@@ -482,9 +482,9 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
   display: flex;
   flex-direction: column;
   background-color: #fff;
-  border-radius: 16px;
+  border-radius: 20px; /* 大圆角 */
   overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); /* 更柔和的阴影 */
   border: 1px solid #e2e8f0;
 }
 
@@ -492,9 +492,9 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 16px 32px;
   background-color: #fff;
-  border-bottom: 2px solid #f0f0f0;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .left-controls {
@@ -504,21 +504,17 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 }
 
 .page-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  color: #1e293b;
+  color: #0f172a;
   margin: 0;
   display: flex;
   align-items: center;
+  letter-spacing: -0.5px;
 }
 
-.bank-selector {
-  width: 180px;
-}
-
-.search-box {
-  width: 300px;
-}
+.bank-selector { width: 180px; }
+.search-box { width: 300px; }
 
 .main-layout-area {
   flex: 1;
@@ -528,13 +524,9 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 /* Auto Expand Sider Styles */
 .auto-expand-sider {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 50; /* Ensure it stays on top if we used absolute, but pushing is better */
+    z-index: 50;
     position: relative;
-    /* We want the sider to physically expand, pushing content. 
-       If client wants OVERLAY, we'd enable position='absolute' on sider. 
-       For "Fixed" behavior, pushing is usually preferred. 
-       For "Auto-hide", floating might be better, but mixed mode is tricky in Naive Layout. 
-       Let's stick to standard flow first. */
+    border-right: 1px solid #f1f5f9 !important;
 }
 
 .collapsed-strip {
@@ -542,58 +534,94 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
     width: 100%;
     display: flex;
     justify-content: center;
-    padding-top: 20px;
-    background: #fdfdfd;
+    padding-top: 24px;
+    background: #fff;
     cursor: pointer;
+    transition: background-color 0.2s;
 }
+.collapsed-strip:hover { background-color: #f8fafc; }
 
 .expanded-content {
     height: 100%;
     display: flex;
     flex-direction: column;
+    background-color: #fff;
 }
 
+/* 🌟 左侧章节栏美化 */
 .sider-toolbar {
-    padding: 12px 16px 8px 16px;
-    /* border-bottom: 1px solid #eee; Moved to bank-select */
+    padding: 20px 20px 12px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #fafafa;
+    background: #fff;
 }
 
-.toolbar-title { font-weight: bold; font-size: 14px; color: #333; }
+.toolbar-title { 
+    font-weight: 800; 
+    font-size: 16px; 
+    color: #1e293b; 
+    letter-spacing: -0.02em;
+}
+
+.sider-bank-select {
+    padding: 0 20px 16px 20px;
+    background: #fff;
+    border-bottom: 1px dashed #e2e8f0;
+}
 
 .sider-scroll-area {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: 16px;
+}
+/* 树形控件美化 */
+:deep(.n-tree-node) {
+    padding: 6px 0;
+    border-radius: 8px;
+    transition: all 0.2s;
+}
+:deep(.n-tree-node:hover) {
+    background-color: #f8fafc;
+}
+:deep(.n-tree-node--selected) {
+    background-color: #eff6ff !important;
+}
+:deep(.n-tree-node-content__text) {
+    font-size: 14px;
+    color: #475569;
+    font-weight: 500;
+}
+:deep(.n-tree-node--selected .n-tree-node-content__text) {
+    color: #3b82f6;
+    font-weight: 700;
 }
 
 
 /* Question List & Sheet Styles */
-.question-list { display: flex; flex-direction: column; padding-bottom: 20px; }
-.sheet-header { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; background-color: #fff; display: flex; justify-content: space-between; align-items: center; }
-.sheet-title { font-weight: 700; font-size: 14px; color: #1e293b; }
-.sheet-content { padding: 16px; flex: 1; overflow-y: auto; }
-.sheet-flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.question-list { display: flex; flex-direction: column; padding-bottom: 40px; }
+.sheet-header { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; background-color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.sheet-title { font-weight: 700; font-size: 15px; color: #1e293b; }
+.sheet-content { padding: 20px; flex: 1; overflow-y: auto; }
+.sheet-flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
 .type-header { 
-    width: 100%; font-size: 12px; font-weight: 700; color: #64748b; 
-    margin-top: 16px; margin-bottom: 8px; 
+    width: 100%; font-size: 13px; font-weight: 700; color: #94a3b8; 
+    margin-top: 20px; margin-bottom: 12px; 
     display: flex; align-items: center; 
     letter-spacing: 0.5px;
 }
 .type-header:first-child { margin-top: 0; }
-.type-dot { width: 6px; height: 6px; background-color: #cbd5e1; border-radius: 50%; margin-right: 8px; }
+.type-dot { width: 6px; height: 6px; background-color: #e2e8f0; border-radius: 50%; margin-right: 8px; }
 
 .number-circle { 
-    width: 32px; 
-    height: 32px; 
-    border-radius: 50%; 
+    width: 36px; 
+    height: 36px; 
+    border-radius: 12px; /* 方圆形 */
     background-color: #fff; 
-    border: 1px solid #e2e8f0;
+    border: 1px solid #f1f5f9;
     color: #64748b; 
-    font-size: 13px; 
+    font-size: 14px; 
     font-weight: 600; 
     display: flex; 
     align-items: center; 
@@ -602,46 +630,45 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
     user-select: none; 
     position: relative;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
 .number-circle:hover { 
-    border-color: #94a3b8;
-    color: #334155;
+    border-color: #cbd5e1;
+    color: #1e293b;
     transform: translateY(-2px); 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
 }
 
-/* Status Styles - Modern Gradients & Shadows */
+/* Status Styles */
 .sheet-correct { 
-    background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important; 
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; 
     border: none !important;
     color: #fff !important; 
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+    box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3) !important;
 }
 
 .sheet-wrong { 
-    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important; 
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important; 
     border: none !important;
     color: #fff !important; 
-    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3) !important;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3) !important;
 }
 
 .sheet-partial { 
-    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important; 
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%) !important; 
     border: none !important;
     color: #fff !important; 
-    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3) !important;
+    box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3) !important;
 }
 
-/* Add a tiny indicator for current active question if needed in future */
 .number-circle.active-q {
     border-color: #3b82f6;
     color: #3b82f6;
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
-.load-trigger { padding: 24px; text-align: center; color: #94a3b8; font-size: 13px; }
+.load-trigger { padding: 32px; text-align: center; color: #94a3b8; font-size: 13px; }
 
 :deep(.highlight-flash) {
     animation: flash-bg 1.5s ease-out;
@@ -652,7 +679,6 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
     100% { background-color: transparent; }
 }
 
-/* Transition for layout toggle */
 .content-layout {
   transition: all 0.3s ease;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, useMessage, NTag, NIcon, NModal } from 'naive-ui'
+import { NButton, useMessage, NTag, NIcon, NModal, NDivider } from 'naive-ui'
+import { RefreshOutline } from '@vicons/ionicons5'
 import request from '../utils/request'
 
 const props = defineProps<{
@@ -185,8 +186,10 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
     <div class="q-stem">
       <span class="q-index">{{ indexLabel }}</span>
       <n-tag v-if="isMultiChoice" type="warning" size="small" style="margin-right: 6px; vertical-align: text-bottom;">多选</n-tag>
+      <div v-if="result" class="redo-btn" @click.stop="handleRedo">
+          <n-icon size="14"><RefreshOutline /></n-icon> 重做
+      </div>
       <span class="q-text" v-html="formatText(question.stem)"></span>
-      <a v-if="result" class="redo-link" @click.stop="handleRedo">重做</a>
     </div>
 
     <div v-if="isSubjective" style="margin: 10px 0 0 24px;">
@@ -338,15 +341,27 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
     color: #3b82f6; 
     font-size: 18px;
 }
-.redo-link { 
+.redo-btn { 
     float: right; 
-    font-size: 13px; 
-    color: #94a3b8; 
+    font-size: 12px; 
+    color: #64748b; 
     cursor: pointer; 
     margin-left: 12px; 
     transition: all 0.2s;
+    background-color: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
 }
-.redo-link:hover { color: #f59e0b; text-decoration: underline; }
+.redo-btn:hover { 
+    color: #fff; 
+    background-color: #f59e0b; 
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(245, 158, 11, 0.3);
+}
 
 /* 🔘 B1 选择器 */
 .b1-selector-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; margin-left: 24px; }

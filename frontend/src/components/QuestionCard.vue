@@ -303,10 +303,14 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
                   </n-popover>
                </div>
                <div class="right">
-                  <n-switch v-model:value="editorState.isPublic" size="small" title="设为私密/公开">
-                      <template #checked-icon><n-icon><GlobeOutline/></n-icon></template>
-                      <template #unchecked-icon><n-icon><LockClosedOutline/></n-icon></template>
-                  </n-switch>
+                  <div class="privacy-toggle">
+                      <n-button size="small" round :type="editorState.isPublic ? 'primary' : 'default'" :secondary="!editorState.isPublic" @click="editorState.isPublic = true">
+                          <template #icon><n-icon><GlobeOutline/></n-icon></template> 公开
+                      </n-button>
+                      <n-button size="small" round :type="!editorState.isPublic ? 'warning' : 'default'" :secondary="editorState.isPublic" @click="editorState.isPublic = false">
+                          <template #icon><n-icon><LockClosedOutline/></n-icon></template> 私密
+                      </n-button>
+                  </div>
                   <n-button type="primary" round class="send" :loading="savingNote" :disabled="!editorState.content.trim() && !editorState.images.length" @click="saveNote">
                       <template #icon><n-icon><Send/></n-icon></template>
                   </n-button>
@@ -539,7 +543,7 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
   --n-box-shadow-focus: none !important; 
   padding-bottom: 20px;
 }
-.count-tip { position: absolute; bottom: 0; right: 0; font-size: 12px; color: #cbd5e1; pointer-events: none; }
+.count-tip { position: absolute; bottom: 8px; right: 12px; font-size: 12px; color: #cbd5e1; pointer-events: none; }
 
 /* 工具栏 */
 .toolbar { margin-top: 12px; display: flex; justify-content: space-between; align-items: center; }
@@ -547,6 +551,7 @@ onMounted(() => { if (props.initShowNotes) showNotes.value = true })
 .right { display: flex; align-items: center; gap: 12px; }
 .tool-btn { color: #64748b; transition: all 0.2s; }
 .tool-btn:hover { background-color: #e2e8f0; color: #0f172a; }
+.privacy-toggle { display: flex; gap: 8px; margin-right: 12px; }
 
 /* 💬 评论列表美化 */
 .list { margin-top: 24px; }
