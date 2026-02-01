@@ -176,6 +176,11 @@ const handleSourceChange = () => {
   fetchData()
 }
 
+const handleSearch = () => {
+    pagination.page = 1
+    fetchData()
+}
+
 const handlePageChange = (page: number) => { 
     pagination.page = page
     fetchData() 
@@ -189,22 +194,6 @@ onMounted(() => { fetchBanks() })
 
 <template>
   <div class="notes-container">
-    <div class="page-control-bar">
-      <div class="left-controls">
-        <h2 class="page-title">
-          <n-icon color="#18a058" style="margin-right: 8px; vertical-align: bottom;"><JournalOutline /></n-icon>
-          我的笔记本
-        </h2>
-        <div class="bank-selector">
-          <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
-        </div>
-      </div>
-      
-      <div class="right-controls">
-         <!-- Add search or filters here if needed later -->
-      </div>
-    </div>
-
     <n-layout has-sider class="main-layout-area">
       <n-layout-sider 
         bordered 
@@ -212,14 +201,36 @@ onMounted(() => { fetchBanks() })
         :collapsed-width="0" 
         :width="260" 
         show-trigger="arrow-circle" 
-        content-style="padding: 12px;" 
+        content-style="padding: 16px; display: flex; flex-direction: column;" 
         style="background-color: #fafafa;"
       >
+        <!-- 侧边栏头部控制区 -->
+        <div class="sider-controls">
+            <div class="page-title-row">
+                <n-icon color="#18a058" size="20"><JournalOutline /></n-icon>
+                <span class="sb-title">我的笔记本</span>
+            </div>
+
+            <div class="control-item">
+                <div class="label-text">当前题库</div>
+                <n-select v-model:value="filter.source" :options="bankOptions" placeholder="选择题库" @update:value="handleSourceChange" size="small" />
+            </div>
+            
+            <div class="control-item">
+                <div class="label-text">搜索笔记</div>
+                <n-input v-model:value="filter.keyword" placeholder="关键词..." size="small" @keydown.enter="handleSearch" clearable>
+                    <template #prefix><n-icon><SearchOutline /></n-icon></template>
+                </n-input>
+            </div>
+        </div>
+
+        <n-divider style="margin: 16px 0;" />
+
         <div style="font-weight: bold; color: #333; margin-bottom: 12px; padding-left: 8px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
           <n-icon color="#18a058"><FilterOutline /></n-icon> 笔记分布
         </div>
         
-        <n-spin :show="loadingTree">
+        <n-spin :show="loadingTree" style="flex: 1; overflow-y: auto;">
           <n-tree
             block-line 
             expand-on-click 
@@ -298,38 +309,18 @@ onMounted(() => { fetchBanks() })
   background-color: transparent;
 }
 
-.page-control-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 0;
-  background-color: transparent;
-  border-bottom: none;
-}
-
-.left-controls, .right-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.page-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0;
-  display: flex;
-  align-items: center;
-}
-
-.bank-selector { width: 150px; }
 .main-layout-area { 
   flex: 1; 
   overflow: hidden; 
-  border-radius: 16px; 
-  border: 1px solid #e2e8f0;
+  /* Flat */
   background-color: #fff;
 }
+
+/* Sidebar Controls */
+.sider-controls { display: flex; flex-direction: column; gap: 16px; }
+.page-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: #1e293b; font-weight: 700; font-size: 18px; }
+.control-item { display: flex; flex-direction: column; gap: 6px; }
+.label-text { font-size: 12px; color: #64748b; font-weight: 500; }
 
 .note-item-wrapper { margin-bottom: 30px; }
 .note-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 4px; }
