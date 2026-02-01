@@ -806,13 +806,22 @@ onMounted(() => {
 
 @media (max-width: 650px) {
     .dashboard-container { padding: 0 0 40px 0; }
-    .banner-glass { flex-direction: column; align-items: stretch; padding: 20px 16px; gap: 16px; }
+    .banner-glass { flex-direction: column; align-items: center; padding: 20px 16px; gap: 16px; }
     .user-welcome { width: 100%; justify-content: flex-start; flex-direction: row; align-items: center; }
     .user-avatar { width: 48px !important; height: 48px !important; font-size: 18px !important; }
-    .avatar-ring { padding: 3px; }
+    /* .avatar-ring padding removed */
     .greet-title { font-size: 20px; }
     .greet-sub { font-size: 13px; }
-    .header-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 12px 8px; gap: 4px; background: rgba(255,255,255,0.6); }
+    .header-stats { 
+        width: 100%; 
+        max-width: 360px; /* Limit width */
+        margin: 0 auto;   /* Center horizontally */
+        display: grid; 
+        grid-template-columns: 1fr 1fr 1fr; 
+        padding: 12px 8px; 
+        gap: 4px; 
+        background: rgba(255,255,255,0.6); 
+    }
     .stat-item { flex-direction: column; align-items: center; text-align: center; min-width: auto; gap: 4px; }
     .stat-divider { display: none; }
     .stat-icon-wrapper { width: 32px; height: 32px; font-size: 16px; margin-bottom: 2px; }
