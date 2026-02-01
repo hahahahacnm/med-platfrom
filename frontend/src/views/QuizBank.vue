@@ -429,14 +429,14 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
              <!-- Expanded Content -->
              <div class="expanded-content" v-show="!rightCollapsed">
                 <div class="sheet-header">
-                    <div class="sheet-title">📝 答题卡 ({{ globalSheetItems.length }})</div>
+                    <div class="sheet-title">题目总览 ({{ globalSheetItems.length }})</div>
                     <n-tooltip trigger="hover">
                         <template #trigger>
                              <n-button text size="small" @click="toggleRightPin" :type="rightPinned ? 'primary' : 'default'">
                                 <template #icon><n-icon size="18"><component :is="rightPinned ? Push : PushOutline" /></n-icon></template>
                             </n-button>
                         </template>
-                         {{ rightPinned ? '取消固定' : '固定答题卡' }}
+                         {{ rightPinned ? '取消固定' : '固定栏' }}
                     </n-tooltip>
                 </div>
                 
@@ -565,25 +565,82 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 
 /* Question List & Sheet Styles */
 .question-list { display: flex; flex-direction: column; padding-bottom: 20px; }
-.sheet-header { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; background-color: #fafafa; display: flex; justify-content: space-between; align-items: center; }
-.sheet-title { font-weight: bold; font-size: 14px; }
+.sheet-header { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; background-color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.sheet-title { font-weight: 700; font-size: 14px; color: #1e293b; }
 .sheet-content { padding: 16px; flex: 1; overflow-y: auto; }
-.sheet-flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.type-header { width: 100%; font-size: 12px; font-weight: bold; color: #999; margin-top: 10px; margin-bottom: 4px; display: flex; align-items: center; }
-.type-dot { width: 6px; height: 6px; background-color: #18a058; border-radius: 50%; margin-right: 6px; }
-.number-circle { width: 34px; height: 34px; border-radius: 8px; background-color: #f5f7fa; color: #666; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; user-select: none; }
-.number-circle:hover { background-color: #e0e0e0; transform: translateY(-2px); }
-.sheet-correct { background-color: #18a058 !important; color: #fff !important; }
-.sheet-wrong { background-color: #d03050 !important; color: #fff !important; }
-.sheet-partial { background-color: #f0a020 !important; color: #fff !important; }
-.load-trigger { padding: 20px; text-align: center; color: #999; }
+.sheet-flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.type-header { 
+    width: 100%; font-size: 12px; font-weight: 700; color: #64748b; 
+    margin-top: 16px; margin-bottom: 8px; 
+    display: flex; align-items: center; 
+    letter-spacing: 0.5px;
+}
+.type-header:first-child { margin-top: 0; }
+.type-dot { width: 6px; height: 6px; background-color: #cbd5e1; border-radius: 50%; margin-right: 8px; }
+
+.number-circle { 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 50%; 
+    background-color: #fff; 
+    border: 1px solid #e2e8f0;
+    color: #64748b; 
+    font-size: 13px; 
+    font-weight: 600; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    cursor: pointer; 
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); 
+    user-select: none; 
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.number-circle:hover { 
+    border-color: #94a3b8;
+    color: #334155;
+    transform: translateY(-2px); 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+/* Status Styles - Modern Gradients & Shadows */
+.sheet-correct { 
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%) !important; 
+    border: none !important;
+    color: #fff !important; 
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+}
+
+.sheet-wrong { 
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important; 
+    border: none !important;
+    color: #fff !important; 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3) !important;
+}
+
+.sheet-partial { 
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important; 
+    border: none !important;
+    color: #fff !important; 
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Add a tiny indicator for current active question if needed in future */
+.number-circle.active-q {
+    border-color: #3b82f6;
+    color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.load-trigger { padding: 24px; text-align: center; color: #94a3b8; font-size: 13px; }
 
 :deep(.highlight-flash) {
     animation: flash-bg 1.5s ease-out;
 }
 
 @keyframes flash-bg {
-    0% { background-color: rgba(24, 160, 88, 0.2); }
+    0% { background-color: rgba(37, 99, 235, 0.1); }
     100% { background-color: transparent; }
 }
 
