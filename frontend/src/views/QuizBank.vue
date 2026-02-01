@@ -302,11 +302,7 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
 
       </div>
 
-      <div class="search-box">
-        <n-input v-model:value="searchKeyword" placeholder="搜索题目..." round @keydown.enter="handleSearch" @clear="clearSearch" clearable>
-          <template #prefix><n-icon :component="SearchOutline" /></template>
-        </n-input>
-      </div>
+
     </div>
 
     <!-- Main Layout -->
@@ -443,6 +439,13 @@ watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrig
                          {{ rightPinned ? '取消固定' : '固定答题卡' }}
                     </n-tooltip>
                 </div>
+                
+                <div class="sheet-search" style="padding: 12px 16px; border-bottom: 1px solid #f0f0f0;">
+                    <n-input v-model:value="searchKeyword" placeholder="搜索题目..." size="small" round @keydown.enter="handleSearch" @clear="clearSearch" clearable>
+                       <template #prefix><n-icon :component="SearchOutline" /></template>
+                    </n-input>
+                </div>
+
                 <div class="sheet-content">
                     <div class="sheet-flow">
                     <template v-for="item in answerSheetItems" :key="item.key">
