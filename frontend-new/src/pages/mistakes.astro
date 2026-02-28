@@ -1,0 +1,12 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Sidebar } from '../components/Sidebar';
+import { MistakesContent } from '../components/MistakesContent';
+
+const currentPath = Astro.url.pathname;
+---
+
+<Layout title="我的错题 - 医学学习平台">
+	<Sidebar client:load activePath={currentPath} slot="sidebar" />
+	<MistakesContent client:load />
+</Layout>

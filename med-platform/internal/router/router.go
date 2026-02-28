@@ -4,15 +4,15 @@ import (
 	"med-platform/internal/answer"
 	"med-platform/internal/common/captcha"
 	"med-platform/internal/common/middleware"
+	"med-platform/internal/common/service"
 	"med-platform/internal/feedback"
 	"med-platform/internal/forum"
 	"med-platform/internal/note"
 	"med-platform/internal/payment"
 	"med-platform/internal/product"
 	"med-platform/internal/question"
-	"med-platform/internal/sysconfig" 
+	"med-platform/internal/sysconfig"
 	"med-platform/internal/user"
-	"med-platform/internal/common/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +28,7 @@ type RouteManager struct {
 	payment   *payment.Handler
 	feedback  *feedback.Handler
 	forum     *forum.Handler
-	sysconfig *sysconfig.Handler 
+	sysconfig *sysconfig.Handler
 
 	// Limiters (限流器)
 	commentLimiter *middleware.IPRateLimiter
@@ -56,7 +56,7 @@ func SetupRouter() *gin.Engine {
 		payment:   payment.NewHandler(),
 		feedback:  feedback.NewHandler(),
 		forum:     forum.NewHandler(),
-		sysconfig: sysconfig.NewHandler(), 
+		sysconfig: sysconfig.NewHandler(),
 
 		// 针对不同场景的限流策略
 		commentLimiter: middleware.NewIPRateLimiter(1, 3), // 发言：1秒3次
@@ -66,8 +66,8 @@ func SetupRouter() *gin.Engine {
 	// 4. 注册路由组
 	rootGroup := r.Group("/api/v1")
 	{
-		mgr.registerPublicRoutes(rootGroup)    // 🟢 公共接口 (无需登录)
-		mgr.registerAuthRoutes(rootGroup)      // 🟠 需登录接口 (JWT)
+		mgr.registerPublicRoutes(rootGroup) // 🟢 公共接口 (无需登录)
+		mgr.registerAuthRoutes(rootGroup)   // 🟠 需登录接口 (JWT)
 	}
 
 	return r
@@ -81,12 +81,12 @@ func (m *RouteManager) registerPublicRoutes(g *gin.RouterGroup) {
 	// 认证与基础
 	g.POST("/auth/register", m.user.Register)
 	g.POST("/auth/login", m.user.Login)
-	
+
 	// 🔥 修复点：已将 /category-tree 移出公共路由，移动到下方的 registerQuestionRoutes 中
 
 	// 魔法链接相关接口
-	g.GET("/auth/verify-email", m.user.VerifyEmail) 
-	g.POST("/auth/resend-email", m.user.ResendEmail) 
+	g.GET("/auth/verify-email", m.user.VerifyEmail)
+	g.POST("/auth/resend-email", m.user.ResendEmail)
 
 	// 支付回调
 	g.GET("/payment/mock/callback", m.payment.MockSuccess)
@@ -103,7 +103,7 @@ func (m *RouteManager) registerAuthRoutes(parent *gin.RouterGroup) {
 	m.registerUserCenterRoutes(userGroup)
 	m.registerQuestionRoutes(userGroup)
 	m.registerNoteRoutes(userGroup)
-	m.registerCommerceRoutes(userGroup) 
+	m.registerCommerceRoutes(userGroup)
 
 	// === 后台管理模块 (内部鉴权) ===
 	m.registerAdminRoutes(userGroup)
@@ -114,7 +114,7 @@ func (m *RouteManager) registerUploadRoutes(g *gin.RouterGroup) {
 	limit := middleware.RateLimitMiddleware(m.uploadLimiter)
 	g.POST("/upload/avatar", limit, m.user.UploadAvatar)
 	g.POST("/upload/payment", limit, m.user.UploadPaymentCode)
-	g.POST("/upload", limit, m.user.UploadAvatar) 
+	g.POST("/upload", limit, m.user.UploadAvatar)
 }
 
 // 💬 论坛与消息模块
@@ -130,10 +130,10 @@ func (m *RouteManager) registerForumRoutes(g *gin.RouterGroup) {
 	g.GET("/forum/posts/:id", m.forum.GetPostDetail)
 	g.POST("/forum/posts", m.forum.CreatePost)
 	g.DELETE("/forum/posts/:id", m.forum.DeletePost)
-	
+
 	// 图片上传 (带限流)
 	g.POST("/forum/upload", middleware.RateLimitMiddleware(m.uploadLimiter), m.forum.UploadImage)
-	
+
 	g.GET("/forum/comments", m.forum.ListComments)
 	g.POST("/forum/comments", m.forum.CreateComment)
 	g.DELETE("/forum/comments/:id", m.forum.DeleteComment)
@@ -146,7 +146,7 @@ func (m *RouteManager) registerUserCenterRoutes(g *gin.RouterGroup) {
 	g.PUT("/user/profile", m.user.UpdateProfile)
 	g.POST("/user/avatar", m.user.UploadAvatar)
 	g.PUT("/user/password", m.user.ChangePassword)
-	
+
 	g.POST("/user/email/bind", m.user.BindNewEmail)
 }
 
@@ -154,8 +154,8 @@ func (m *RouteManager) registerUserCenterRoutes(g *gin.RouterGroup) {
 func (m *RouteManager) registerQuestionRoutes(g *gin.RouterGroup) {
 	// 题目基础
 	// 🔥 修复点：将目录树接口移入认证路由，以便解析 userID 统计进度
-	g.GET("/category-tree", m.question.GetTree) 
-	g.GET("/questions/skeleton", m.question.GetChapterSkeleton) 
+	g.GET("/category-tree", m.question.GetTree)
+	g.GET("/questions/skeleton", m.question.GetChapterSkeleton)
 	g.GET("/questions", m.question.List)
 	g.GET("/questions/:id", m.question.GetDetail)
 	g.GET("/banks", m.question.GetSources)
@@ -182,9 +182,10 @@ func (m *RouteManager) registerQuestionRoutes(g *gin.RouterGroup) {
 // 📝 笔记模块
 func (m *RouteManager) registerNoteRoutes(g *gin.RouterGroup) {
 	limit := middleware.RateLimitMiddleware(m.commentLimiter)
-	g.POST("/notes", limit, m.note.SaveNote) 
+	g.POST("/notes", limit, m.note.SaveNote)
 	g.GET("/notes", m.note.ListNotes)
 	g.GET("/notes/my", m.note.GetMyNotes)
+	g.GET("/notes/skeleton", m.note.GetNoteSkeleton)
 	g.GET("/notes/note-tree", m.note.GetNoteTree)
 	g.DELETE("/notes/:id", m.note.DeleteNote)
 	g.POST("/notes/upload", middleware.RateLimitMiddleware(m.uploadLimiter), m.note.UploadImage)
@@ -196,19 +197,20 @@ func (m *RouteManager) registerNoteRoutes(g *gin.RouterGroup) {
 // 💳 商业化模块 (支付/商品/反馈)
 func (m *RouteManager) registerCommerceRoutes(g *gin.RouterGroup) {
 	g.GET("/market/products", m.product.ListMarketProducts)
-	
+
 	// 🔥 新增这一行：获取单个商品的详细信息（富文本详情等）
 	g.GET("/market/products/:id", m.product.GetProductDetail)
-	
+
 	g.POST("/pay/create", m.payment.CreatePay)
 	g.POST("/codes/redeem", m.payment.RedeemCode)
-	
+
 	g.POST("/product/exchange", m.product.ExchangeProduct)
 
 	g.GET("/user/products/:id", m.product.GetUserProducts)
 	g.POST("/platform-feedback", m.feedback.Create)
 	g.GET("/platform-feedback", m.feedback.GetMyList)
 }
+
 // 🔴 注册后台管理接口
 func (m *RouteManager) registerAdminRoutes(parent *gin.RouterGroup) {
 	// 1️⃣ 员工组 (Staff)
@@ -275,7 +277,6 @@ func (m *RouteManager) registerAdminRoutes(parent *gin.RouterGroup) {
 			superGroup.GET("/codes/export", m.payment.ExportCodes)
 			superGroup.POST("/users/points", m.payment.ManualUpdatePoints)
 			superGroup.POST("/products/upload", middleware.RateLimitMiddleware(m.uploadLimiter), m.product.UploadCover)
-			
 
 			// 题库管理
 			superGroup.POST("/banks/rename", m.question.RenameSource)

@@ -122,7 +122,7 @@ func (h *Handler) SaveNote(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "发布失败"})
 			return
 		}
-		
+
 		if !req.IsPublic {
 			db.DB.Model(&n).UpdateColumn("is_public", false)
 		}
@@ -135,7 +135,7 @@ func (h *Handler) SaveNote(c *gin.Context) {
 					db.DB.Select("stem").First(&q, req.QuestionID)
 
 					title := "题目讨论"
-					stemClean := q.Stem 
+					stemClean := q.Stem
 					if len([]rune(stemClean)) > 15 {
 						title = "题目：" + string([]rune(stemClean)[:15]) + "..."
 					} else if stemClean != "" {
@@ -164,7 +164,9 @@ func (h *Handler) ListNotes(c *gin.Context) {
 
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "5"))
-	if pageSize > 20 { pageSize = 20 }
+	if pageSize > 20 {
+		pageSize = 20
+	}
 	offset := (page - 1) * pageSize
 	sortMode := c.DefaultQuery("sort", "hot")
 
@@ -209,8 +211,8 @@ func (h *Handler) GetMyNotes(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 
 	// 核心参数：分辨是“我发布的(published)”还是“我收藏的(collected)”
-	tab := c.DefaultQuery("tab", "published") 
-	
+	tab := c.DefaultQuery("tab", "published")
+
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
 	offset := (page - 1) * pageSize
@@ -255,7 +257,7 @@ func (h *Handler) GetMyNotes(c *gin.Context) {
 		}).
 		Preload("Question", func(db *gorm.DB) *gorm.DB {
 			// 🔥 轻量级快照：前端只需要题目ID、类型和题干前缀，不需要选项和长篇大论的解析
-			return db.Select("id, type, stem, parent_id") 
+			return db.Select("id, type, stem, parent_id")
 		}).
 		Preload("Parent").
 		Preload("Parent.User", func(db *gorm.DB) *gorm.DB {
@@ -278,22 +280,66 @@ func (h *Handler) GetMyNotes(c *gin.Context) {
 	})
 }
 
+// GetNoteSkeleton 获取笔记题目骨架
+func (h *Handler) GetNoteSkeleton(c *gin.Context) {
+	userId, _ := c.Get("userID")
+	userID := userId.(uint)
+	source := c.Query("source")
+	category := c.Query("category")
+
+	groupExpr := "CASE WHEN questions.parent_id IS NOT NULL AND questions.parent_id > 0 THEN questions.parent_id ELSE questions.id END"
+
+	baseQuery := db.DB.Table("notes").
+		Select(groupExpr+" as id, MAX(questions.type) as type").
+		Joins("JOIN questions ON notes.question_id = questions.id").
+		Where("notes.user_id = ?", userID).
+		Where("questions.deleted_at IS NULL").
+		Group(groupExpr)
+
+	if source != "" {
+		baseQuery = baseQuery.Where("questions.source = ?", source)
+	}
+	if category != "" {
+		baseQuery = baseQuery.Where("questions.category_path LIKE ?", category+"%")
+	}
+
+	type SkeletonItem struct {
+		ID   uint   `json:"id"`
+		Type string `json:"type"`
+	}
+	var items []SkeletonItem
+
+	if err := baseQuery.Order("MAX(notes.updated_at) desc").Scan(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取笔记骨架失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total": len(items),
+		"data":  items,
+	})
+}
+
 // ==========================================
 // 4. 获取笔记目录树 (修复版：精准兼容父子题与分类)
 // ==========================================
 func (h *Handler) GetNoteTree(c *gin.Context) {
 	userID := c.MustGet("userID").(uint)
 	parentIDStr := c.Query("parent_id")
-	if parentIDStr == "" { parentIDStr = c.Query("parent_key") }
+	if parentIDStr == "" {
+		parentIDStr = c.Query("parent_key")
+	}
 	source := c.Query("source")
-	tab := c.DefaultQuery("tab", "published") 
+	tab := c.DefaultQuery("tab", "published")
 	const MaxLevel = 5
 
 	// 1. 获取当前层级的目录
 	query := db.DB.Model(&question.Category{})
 	if parentIDStr == "" || parentIDStr == "0" {
 		query = query.Where("parent_id IS NULL")
-		if source != "" { query = query.Where("source = ?", source) }
+		if source != "" {
+			query = query.Where("source = ?", source)
+		}
 	} else {
 		query = query.Where("parent_id = ?", parentIDStr)
 	}
@@ -311,7 +357,7 @@ func (h *Handler) GetNoteTree(c *gin.Context) {
 	// 3. 循环当前层级分类，使用 category_path 进行精准匹配统计
 	for _, cat := range currentCats {
 		var count int64
-		
+
 		// 核心统计：使用 category_path LIKE 完美兼容父子题，且通过 DISTINCT 去重
 		countQuery := db.DB.Table("notes").
 			Select("COUNT(DISTINCT CASE WHEN questions.parent_id IS NOT NULL AND questions.parent_id > 0 THEN questions.parent_id ELSE questions.id END)").
@@ -328,8 +374,8 @@ func (h *Handler) GetNoteTree(c *gin.Context) {
 
 		countQuery.Scan(&count)
 
-		if count == 0 { 
-			continue 
+		if count == 0 {
+			continue
 		}
 
 		isLeaf := false
@@ -351,26 +397,34 @@ func (h *Handler) GetNoteTree(c *gin.Context) {
 			"count":  count,
 		})
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{"data": result})
 }
 
 // 附加状态：批量查询点赞与收藏状态
 func (h *Handler) attachDynamicStatus(userID uint, notes []Note) {
-	if len(notes) == 0 { return }
+	if len(notes) == 0 {
+		return
+	}
 	var noteIDs []uint
-	for _, n := range notes { noteIDs = append(noteIDs, n.ID) }
+	for _, n := range notes {
+		noteIDs = append(noteIDs, n.ID)
+	}
 
 	startOfDay := getStartOfDay()
 	var likedNoteIDs []uint
 	db.DB.Model(&NoteLike{}).Where("user_id = ? AND note_id IN ? AND created_at >= ?", userID, noteIDs, startOfDay).Pluck("note_id", &likedNoteIDs)
 	likedMap := make(map[uint]bool)
-	for _, id := range likedNoteIDs { likedMap[id] = true }
+	for _, id := range likedNoteIDs {
+		likedMap[id] = true
+	}
 
 	var collectedNoteIDs []uint
 	db.DB.Model(&NoteCollect{}).Where("user_id = ? AND note_id IN ?", userID, noteIDs).Pluck("note_id", &collectedNoteIDs)
 	collectedMap := make(map[uint]bool)
-	for _, id := range collectedNoteIDs { collectedMap[id] = true }
+	for _, id := range collectedNoteIDs {
+		collectedMap[id] = true
+	}
 
 	for i := range notes {
 		notes[i].IsLiked = likedMap[notes[i].ID]
@@ -397,8 +451,12 @@ func (h *Handler) DeleteNote(c *gin.Context) {
 	}
 
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("note_id = ?", n.ID).Delete(&NoteReport{}).Error; err != nil { return err }
-		if err := tx.Unscoped().Delete(&n).Error; err != nil { return err }
+		if err := tx.Where("note_id = ?", n.ID).Delete(&NoteReport{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Delete(&n).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 
@@ -422,14 +480,22 @@ func (h *Handler) ToggleLike(c *gin.Context) {
 		var like NoteLike
 		result := tx.Where("user_id = ? AND note_id = ? AND created_at >= ?", userID, noteID, startOfDay).First(&like)
 		if result.RowsAffected > 0 {
-			if err := tx.Delete(&like).Error; err != nil { return err }
-			if err := tx.Model(&note).UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error; err != nil { return err }
+			if err := tx.Delete(&like).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&note).UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error; err != nil {
+				return err
+			}
 			note.IsLiked = false
 			note.LikeCount--
 		} else {
 			newLike := NoteLike{UserID: userID, NoteID: note.ID}
-			if err := tx.Create(&newLike).Error; err != nil { return err }
-			if err := tx.Model(&note).UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error; err != nil { return err }
+			if err := tx.Create(&newLike).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&note).UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error; err != nil {
+				return err
+			}
 			note.IsLiked = true
 			note.LikeCount++
 		}
@@ -486,9 +552,13 @@ func (h *Handler) ReportNote(c *gin.Context) {
 
 	err = db.DB.Transaction(func(tx *gorm.DB) error {
 		newReport := NoteReport{UserID: userID, NoteID: uint(noteID), Reason: req.Reason}
-		if err := tx.Create(&newReport).Error; err != nil { return err }
+		if err := tx.Create(&newReport).Error; err != nil {
+			return err
+		}
 		if err := tx.Model(&Note{}).Where("id = ?", noteID).
-			Updates(map[string]interface{}{"is_reported":  true, "report_count": gorm.Expr("report_count + 1")}).Error; err != nil { return err }
+			Updates(map[string]interface{}{"is_reported": true, "report_count": gorm.Expr("report_count + 1")}).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 
@@ -511,10 +581,18 @@ func (h *Handler) AdminListNotes(c *gin.Context) {
 
 	query := db.DB.Model(&Note{}).Preload("User").Preload("Question").Preload("Reports").Order("created_at desc")
 
-	if onlyReported == "true" { query = query.Where("is_reported = ?", true).Order("report_count desc") }
-	if keyword != "" { query = query.Where("content LIKE ?", "%"+keyword+"%") }
-	if userID != "" { query = query.Where("user_id = ?", userID) }
-	if questionID != "" { query = query.Where("question_id = ?", questionID) }
+	if onlyReported == "true" {
+		query = query.Where("is_reported = ?", true).Order("report_count desc")
+	}
+	if keyword != "" {
+		query = query.Where("content LIKE ?", "%"+keyword+"%")
+	}
+	if userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if questionID != "" {
+		query = query.Where("question_id = ?", questionID)
+	}
 
 	var total int64
 	query.Count(&total)
@@ -525,7 +603,7 @@ func (h *Handler) AdminListNotes(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data":  notes, "total": total, "page":  page})
+	c.JSON(http.StatusOK, gin.H{"data": notes, "total": total, "page": page})
 }
 
 func (h *Handler) AdminDismissReport(c *gin.Context) {
@@ -533,8 +611,12 @@ func (h *Handler) AdminDismissReport(c *gin.Context) {
 	noteID, _ := strconv.Atoi(noteIDStr)
 
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("note_id = ?", noteID).Delete(&NoteReport{}).Error; err != nil { return err }
-		if err := tx.Model(&Note{}).Where("id = ?", noteID).Updates(map[string]interface{}{"is_reported": false, "report_count": 0}).Error; err != nil { return err }
+		if err := tx.Where("note_id = ?", noteID).Delete(&NoteReport{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Note{}).Where("id = ?", noteID).Updates(map[string]interface{}{"is_reported": false, "report_count": 0}).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 

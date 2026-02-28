@@ -1,0 +1,12 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Sidebar } from '../components/Sidebar';
+import { NotesContent } from '../components/NotesContent';
+
+const currentPath = Astro.url.pathname;
+---
+
+<Layout title="我的笔记 - 医学学习平台">
+	<Sidebar client:load activePath={currentPath} slot="sidebar" />
+	<NotesContent client:load />
+</Layout>

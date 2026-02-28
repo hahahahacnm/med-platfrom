@@ -1,0 +1,14 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { Sidebar } from '../components/Sidebar';
+import { Topbar } from '../components/Topbar';
+import { QuizContent } from '../components/QuizContent';
+---
+
+<Layout title="题库中心 - Med Platform">
+	<Sidebar currentPath="/quiz" slot="sidebar" client:load />
+	<div slot="topbar" class="w-full">
+		<Topbar currentPath="/quiz" client:load />
+	</div>
+	<QuizContent client:load />
+</Layout>

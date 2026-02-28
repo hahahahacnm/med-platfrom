@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"med-platform/internal/common/captcha"
+	"med-platform/internal/common/config"
 	"med-platform/internal/common/db"
 	"med-platform/internal/common/jwt"
 	"med-platform/internal/common/service" // 🔥 引入邮件服务
@@ -28,7 +29,7 @@ type RegisterRequest struct {
 	Password       string `json:"password" binding:"required"`
 	Nickname       string `json:"nickname" binding:"required"`
 	Email          string `json:"email" binding:"required"`
-	InvitationCode string `json:"invitation_code"` 
+	InvitationCode string `json:"invitation_code"`
 	CaptchaId      string `json:"captcha_id"`
 	CaptchaValue   string `json:"captcha_value"`
 }
@@ -44,9 +45,12 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	if !captcha.Verify(req.CaptchaId, req.CaptchaValue) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已失效"})
-		return
+	// 开发模式下允许跳过验证码
+	if config.Cfg.App.Env != "dev" || (req.CaptchaId != "" && req.CaptchaValue != "") {
+		if !captcha.Verify(req.CaptchaId, req.CaptchaValue) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已失效"})
+			return
+		}
 	}
 
 	if matched, _ := regexp.MatchString(`^[a-zA-Z][a-zA-Z0-9_]{3,19}$`, req.Username); !matched {
@@ -88,7 +92,7 @@ func (h *Handler) Register(c *gin.Context) {
 		}
 
 		hashedPwd, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		
+
 		db.DB.Transaction(func(tx *gorm.DB) error {
 			tx.Model(&existingUser).Updates(map[string]interface{}{
 				"username":   req.Username,
@@ -97,7 +101,7 @@ func (h *Handler) Register(c *gin.Context) {
 				"email":      req.Email,
 				"invited_by": agentID,
 			})
-			
+
 			tx.Where("user_id = ? AND type = 'register'", existingUser.ID).Delete(&VerificationToken{})
 			tokenStr := uuid.New().String()
 			tx.Create(&VerificationToken{
@@ -222,9 +226,11 @@ func (h *Handler) ResendEmail(c *gin.Context) {
 
 	// 🔥 修复处 3：自动获取用户昵称用于发信
 	name := u.Nickname
-	if name == "" { name = u.Username }
+	if name == "" {
+		name = u.Username
+	}
 	go service.SendVerificationEmail(u.Email, name, tokenStr, "register")
-	
+
 	c.JSON(http.StatusOK, gin.H{"message": "激活邮件已重新发送，请注意查收"})
 }
 
@@ -245,9 +251,12 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	if !captcha.Verify(req.CaptchaId, req.CaptchaValue) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已失效"})
-		return
+	// 🔥 开发环境下，如果前端尚未集成验证码组件，允许跳过验证码校验
+	if config.Cfg.App.Env != "dev" || (req.CaptchaId != "" && req.CaptchaValue != "") {
+		if !captcha.Verify(req.CaptchaId, req.CaptchaValue) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "验证码错误或已失效"})
+			return
+		}
 	}
 
 	var user User
@@ -288,7 +297,6 @@ func (h *Handler) Login(c *gin.Context) {
 		"invitation_code": user.InvitationCode,
 	})
 }
-
 
 // =======================
 // 👤 个人中心 (Profile)
@@ -348,10 +356,12 @@ func (h *Handler) BindNewEmail(c *gin.Context) {
 	var currentUser User
 	db.DB.Select("username", "nickname").First(&currentUser, uid)
 	name := currentUser.Nickname
-	if name == "" { name = currentUser.Username }
+	if name == "" {
+		name = currentUser.Username
+	}
 
 	go service.SendVerificationEmail(req.Email, name, tokenStr, "change_email")
-	
+
 	c.JSON(http.StatusOK, gin.H{"message": "确认链接已发送至新邮箱，请在 30 分钟内点击确认"})
 }
 
@@ -378,14 +388,30 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 
 	updates := map[string]interface{}{}
-	if req.Nickname != "" { updates["nickname"] = req.Nickname }
-	if req.School != "" { updates["school"] = req.School }
-	if req.Major != "" { updates["major"] = req.Major }
-	if req.Grade != "" { updates["grade"] = req.Grade }
-	if req.QQ != "" { updates["qq"] = req.QQ }
-	if req.WeChat != "" { updates["wechat"] = req.WeChat }
-	if req.Gender != 0 { updates["gender"] = req.Gender }
-	if req.PaymentImage != "" { updates["payment_image"] = req.PaymentImage }
+	if req.Nickname != "" {
+		updates["nickname"] = req.Nickname
+	}
+	if req.School != "" {
+		updates["school"] = req.School
+	}
+	if req.Major != "" {
+		updates["major"] = req.Major
+	}
+	if req.Grade != "" {
+		updates["grade"] = req.Grade
+	}
+	if req.QQ != "" {
+		updates["qq"] = req.QQ
+	}
+	if req.WeChat != "" {
+		updates["wechat"] = req.WeChat
+	}
+	if req.Gender != 0 {
+		updates["gender"] = req.Gender
+	}
+	if req.PaymentImage != "" {
+		updates["payment_image"] = req.PaymentImage
+	}
 
 	if currentUser.Role == "agent" && req.AgentDiscountRate != nil {
 		rate := *req.AgentDiscountRate

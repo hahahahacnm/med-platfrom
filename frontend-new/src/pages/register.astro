@@ -1,0 +1,11 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { RegisterForm } from '../components/RegisterForm';
+---
+
+<Layout title="注册 - Med Platform">
+    <div class="fixed inset-0 bg-[radial-gradient(circle_at_top_right,theme(colors.blue.100),transparent_40%),radial-gradient(circle_at_bottom_left,theme(colors.primary/10),transparent_40%)] -z-10" />
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <RegisterForm client:load />
+    </div>
+</Layout>
