@@ -5,6 +5,7 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"med-platform/internal/user"
 )
 
 // Category 分类表 (目录树)
@@ -109,3 +110,29 @@ type UserArchivedStat struct {
 func (UserArchivedStat) TableName() string {
 	return "user_archived_stats"
 }
+
+// ---------------------------------------------------------
+// 🔥🔥🔥 试题纠错/反馈表 (新增) 🔥🔥🔥
+// ---------------------------------------------------------
+type QuestionFeedback struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	UserID      uint      `gorm:"index" json:"user_id"`
+	QuestionID  uint      `gorm:"index" json:"question_id"`
+	
+	// 反馈类型：错别字、答案错误、解析不全、图片挂了、其他
+	Type        string    `gorm:"type:varchar(50)" json:"type"` 
+	Content     string    `gorm:"type:text" json:"content"`     // 详细描述
+	
+	// 处理状态
+	Status      int       `gorm:"default:0" json:"status"`      // 0:待处理, 1:已解决, 2:已忽略
+	AdminReply  string    `gorm:"type:text" json:"admin_reply"` // 管理员回复（可选）
+	
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+
+	// 关联
+	User        user.User `gorm:"foreignKey:UserID" json:"user"`
+	Question    Question  `gorm:"foreignKey:QuestionID" json:"question"`
+}
+
+func (QuestionFeedback) TableName() string { return "question_feedbacks" }

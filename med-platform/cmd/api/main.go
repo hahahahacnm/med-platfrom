@@ -2,72 +2,101 @@ package main
 
 import (
 	"fmt"
+	"med-platform/internal/sysconfig"
 	"med-platform/internal/answer"
 	"med-platform/internal/common/config"
+	"med-platform/internal/common/cron"
 	"med-platform/internal/common/db"
 	"med-platform/internal/common/logger"
+	"med-platform/internal/common/model"
+	"med-platform/internal/common/service" // 🔥 修复：补全 service 包导入
+	"med-platform/internal/feedback"
+	"med-platform/internal/forum"
 	"med-platform/internal/note"
+	"med-platform/internal/payment" 
+	"med-platform/internal/common/cache"
 	"med-platform/internal/product"
 	"med-platform/internal/question"
-	"med-platform/internal/router" // 👈 引入 router 包
+	"med-platform/internal/router"
 	"med-platform/internal/user"
-	"med-platform/internal/payment"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 func main() {
-	// 1️⃣ 基础建设初始化
+	// 1. 初始化
 	config.Load()
 	logger.Init(config.GlobalConfig.App.Env)
 	defer logger.Log.Sync()
 	db.Init()
 	logger.Log.Info("database connected successfully")
+    
+	// 1.1 初始化缓存与实时推送枢纽
+	cache.InitRedis()
+	go service.Hub.Run() // 🔥 现在这里不会报错 undefined 了
 
-	// 2️⃣ 数据库迁移 (🔥 新增 UserDailyStat 和 UserArchivedStat)
+	// 2. 数据库迁移
 	err := db.DB.AutoMigrate(
 		&user.User{},
+		&user.VerificationToken{},
 		&question.Question{},
 		&question.Category{},
-		&question.UserDailyStat{},    // 🔥 新增：每日统计表 (热数据)
-		&question.UserArchivedStat{}, // 🔥 新增：历史归档表 (冷数据)
+		&question.UserDailyStat{},
+		&question.UserArchivedStat{},
+		&question.QuestionFeedback{},
+		
 		&answer.AnswerRecord{},
 		&answer.UserMistake{},
 		&answer.UserFavorite{},
+		&answer.AnswerHistory{}, 
+		
 		&note.Note{},
 		&note.NoteLike{},
 		&note.NoteCollect{},
+		&note.NoteReport{},
+		
 		&product.Product{},
-		&product.ProductContent{},
 		&product.ProductSku{},
+		&product.ProductContent{},
 		&product.UserProduct{},
 		&product.ProductAuthLog{},
-		&payment.Order{},
+		&product.ExchangeRecord{},
+
+		&payment.Order{},           
+		&payment.CommissionLog{},   
+		&payment.WithdrawRequest{}, 
+		&payment.ActivationCode{},  
+
+		&feedback.PlatformFeedback{},
+		&forum.ForumBoard{},
+		&forum.ForumPost{},
+		&forum.ForumComment{},
+		&model.ForumReport{},  // 🔥 修复：改为 model.ForumReport，解决 undefined 报错
+		&model.Notification{}, // 统一使用 model 包下的通知模型
+        
+		&sysconfig.SysConfig{},
 	)
 	if err != nil {
 		logger.Log.Fatal("database migration failed", zap.Error(err))
 	}
 
-	// 校准目录树
+	sysconfig.InitConfig()
+
+	// 3. 启动任务
 	fmt.Println("正在校准目录树数据...")
 	question.NewRepository().SyncCategories()
-	fmt.Println("✅ 目录树校准完成")
-
-	// 3️⃣ 启动后台任务 (🔥 新增)
-	// 启动数据归档守护进程，每天自动把超过1年的数据搬到冷库
+	
 	fmt.Println("正在启动数据归档任务...")
 	go answer.StartArchivingTask()
-	fmt.Println("✅ 数据归档任务已后台运行")
+	cron.StartBackgroundTasks()
 
-	// 4️⃣ 启动服务
+	// 4. 启动服务
 	if config.GlobalConfig.App.Env == "prod" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 使用 router 包来统一管理路由
 	r := router.SetupRouter()
-
 	addr := fmt.Sprintf(":%d", config.GlobalConfig.App.Port)
 	logger.Log.Info("Server running on " + addr)
 	r.Run(addr)

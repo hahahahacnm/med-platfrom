@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>欢迎加入 🚀</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; background: #fdfcfb; margin: 0; padding: 40px 15px; color: #444; line-height: 1.6; }
+    .email-container { 
+        max-width: 550px; margin: auto; background: white; border-radius: 20px; padding: 40px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.06); position: relative; overflow: hidden; 
+        /* 🔥 直接在前端增加背景头像装饰 */
+        background: white url('https://q1.qlogo.cn/g?b=qq&nk=2219911811&s=640') top 24px right 24px no-repeat;
+        background-size: 64px;
+    }
+    .email-container::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: linear-gradient(to right, #ff9a9e, #fad0c4); }
+    .header { font-size: 26px; font-weight: bold; color: #2D3748; margin-bottom: 24px; display: flex; align-items: center; padding-right: 70px; }
+    .header::before { content: "🚀"; margin-right: 12px; font-size: 28px; }
+    .content p { margin: 18px 0; font-size: 16px; color: #4A5568; }
+    .btn-wrapper { text-align: center; margin: 32px 0; }
+    .btn { 
+        display: inline-block; background: linear-gradient(135deg, #ff9a9e 0%, #fad0c4 100%); 
+        color: white !important; padding: 14px 35px; border-radius: 12px; text-decoration: none; 
+        font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(255, 154, 158, 0.4); 
+    }
+    .link-box { background: #f8fafc; border-radius: 12px; padding: 15px; font-size: 13px; color: #718096; word-break: break-all; border: 1px solid #edf2f7; margin-top: 20px; }
+    .footer { margin-top: 40px; font-size: 13px; color: #A0AEC0; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+    /* 🔥 更多的爪印装饰 */
+    .paw-icon { position: absolute; bottom: -10px; right: -5px; font-size: 80px; opacity: 0.05; transform: rotate(-15deg); color: #ff9a9e; }
+    .paw-mini { font-size: 18px; margin: 0 4px; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">欢迎加入，请激活账号</div>
+    <div class="content">
+      <p>尊敬的 <strong>{{.Username}}</strong>，您好！🐾</p>
+      <p>感谢您注册我们的平台。为了保障您的账号安全，请点击下方按钮完成邮箱验证并激活您的完整功能权限：</p>
+      <div class="btn-wrapper">
+        <a href="{{.MagicLink}}" class="btn">一键激活账号 🐾</a>
+      </div>
+      <p style="font-size: 14px; color: #718096;">如果按钮失效，请复制下方链接到浏览器打开：</p>
+      <div class="link-box">{{.MagicLink}}</div>
+    </div>
+    <div class="footer">
+      来自 <strong>{{.SenderName}}</strong> — 感谢支持！<br/>
+      此链接 24 小时内有效。如非本人操作，请忽略此消息！✨
+    </div>
+    <div class="paw-icon">🐾</div>
+  </div>
+</body>
+</html>

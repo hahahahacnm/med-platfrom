@@ -22,17 +22,20 @@ const routes = [
     name: 'Register',
     component: Register
   },
+  {
+    path: '/verify-email',
+    name: 'VerifyEmail',
+    component: () => import('../views/auth/VerifyEmail.vue'),
+    meta: { title: '邮箱验证' }
+  },
 
-  // ============================
-  // 🟠 2. 用户页面 (需登录)
-  // ============================
   // ============================
   // 🟠 2. 用户页面 (需登录) - 使用 MainLayout
   // ============================
   {
     path: '/',
     component: () => import('../layout/MainLayout.vue'),
-    redirect: '/home', // 可选：如果希望默认路径清晰显示
+    redirect: '/home', 
     meta: { requiresAuth: true },
     children: [
       {
@@ -65,18 +68,47 @@ const routes = [
         component: MyNotes,
         meta: { title: '我的笔记' }
       },
-      // 把它放在 Home 的同一级，或者根据你的布局需求放置
       {
         path: '/payment-test',
         name: 'PaymentTest',
         component: PaymentTest,
-        meta: { title: '订阅中心' } // 需要登录才能买
+        meta: { title: '订阅中心' }
       },
       {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/personal/Profile.vue'),
         meta: { title: '个人中心' }
+      },
+      {
+        path: 'feedback', // 访问路径 /feedback
+        name: 'PlatformFeedback',
+        component: () => import('../views/PlatformFeedback.vue'),
+        meta: { title: '意见反馈' }
+      },
+      {
+        path: '/forum',
+        component: () => import('../views/forum/ForumHome.vue')
+      },
+      // 🔥🔥🔥 论坛路由 🔥🔥🔥
+      {
+        path: '/forum/board/:id',
+        name: 'BoardDetail',
+        component: () => import('../views/forum/BoardDetail.vue'),
+        meta: { title: '板块详情' }
+      },
+      {
+        path: 'post/:id',
+        name: 'PostDetail',
+        component: () => import('../views/forum/PostDetail.vue'),
+        meta: { title: '帖子详情' }
+      },
+      // 🔥🔥🔥 新增：题目详情页 (用于通知跳转) 🔥🔥🔥
+      {
+        path: 'question/:id',
+        name: 'QuestionDetail',
+        component: () => import('../views/QuestionDetail.vue'),
+        meta: { title: '题目详情' }
       },
     ]
   },
@@ -86,12 +118,21 @@ const routes = [
   // ============================
   {
     path: '/admin',
-    component: AdminLayout, // 🔥 使用带侧边栏的布局
-    meta: { requiresAuth: true, requiresAdmin: true }, // 只有管理员能进
+    component: AdminLayout, 
+    meta: { requiresAuth: true, requiresAdmin: true }, 
     children: [
+      // 🔥🔥🔥 默认跳转到控制台 🔥🔥🔥
       {
         path: '',
-        redirect: '/admin/users' // 默认跳到用户管理
+        name: 'AdminDashboard', 
+        component: () => import('../views/admin/Dashboard.vue'),
+        meta: { title: '控制台' }
+      },
+      {
+        path: 'configs',
+        name: 'SystemConfig',
+        component: () => import('../views/admin/SystemConfig.vue'),
+        meta: { title: '平台参数管理', roles: ['admin'] }
       },
       {
         path: 'users',
@@ -99,36 +140,72 @@ const routes = [
         component: () => import('../views/admin/UserManagement.vue'),
         meta: { title: '用户管理' }
       },
-
-      // 🔥 资源管理器
       {
         path: 'resources',
         name: 'ResourceManager',
         component: () => import('../views/admin/ResourceManager.vue'),
         meta: { title: '资源管理' }
       },
-
-      // 🔥 业务授权
+      {
+        path: 'feedbacks',
+        name: 'FeedbackManager',
+        component: () => import('../views/admin/FeedbackManager.vue'),
+        meta: { title: '题目纠错' }
+      },
       {
         path: 'user-auths',
         name: 'UserAuthManager',
         component: UserAuthManager,
         meta: { title: '业务授权' }
       },
-
-      // 🔥🔥🔥 [新增] 商品管理入口 🔥🔥🔥
+      {
+        path: 'codes',
+        name: 'CodeManager',
+        component: () => import('../views/admin/CodeManager.vue'),
+        meta: { title: '卡密管理', roles: ['admin'] } // 这里注意：只有超管能发卡密，普通代理不能进
+      },
       {
         path: 'products',
         name: 'ProductManager',
-        component: () => import('../views/admin/ProductManager.vue'),
+        component: () => import('../views/admin/ProductManager.vue'), 
         meta: { title: '商品配置' }
       },
       {
-        path: '/admin/audit-logs',
+        path: 'discount-settings',
+        name: 'DiscountSettings',
+        component: () => import('../views/admin/DiscountSettings.vue'),
+        meta: { title: '优惠策略配置' }
+      },
+      {
+        path: 'audit-logs', 
         name: 'AuditLogs',
         component: () => import('../views/admin/AuditLogManager.vue'),
         meta: { title: '授权审计' }
       },
+      {
+        path: 'notes',
+        name: 'NoteManagement',
+        component: () => import('../views/admin/NoteManagement.vue'),
+        meta: { title: '评论管理' }
+      },
+      {
+        path: 'platform-feedbacks',
+        name: 'PlatformFeedbackManager',
+        component: () => import('../views/admin/PlatformFeedbackManager.vue'),
+        meta: { title: '平台反馈管理' }
+      },
+      {
+        path: 'forum', // 访问 /admin/forum
+        name: 'AdminForum',
+        component: () => import('../views/admin/Forum.vue'),
+        meta: { title: '论坛管理' }
+      },
+      {
+        path: 'mail-center', // 或者你喜欢的路径
+        name: 'AdminMailCenter',
+        component: () => import('../views/admin/MailCenter.vue'),
+        meta: { requiresAuth: true, roles: ['admin', 'superadmin'] }
+      }
     ]
   }
 ]
@@ -139,20 +216,24 @@ const router = createRouter({
 })
 
 // 🔥🔥🔥 增强版路由守卫 🔥🔥🔥
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
   const userRole = localStorage.getItem('role')
 
-  const whiteList = ['Login', 'Register']
+  // 🔥 核心修改：将 VerifyEmail 加入白名单，允许无 token 访问
+  const whiteList = ['Login', 'Register', 'VerifyEmail']
 
   // 1. 检查 Token
   if (!token && !whiteList.includes(to.name as string)) {
     return next({ name: 'Login' })
   }
 
-  // 2. 已登录防回退
+  // 2. 已登录防回退 (如果已登录且尝试访问登录、注册等页面，重定向到首页)
   if (token && whiteList.includes(to.name as string)) {
-    return next({ name: 'Home' })
+    // 允许已登录用户重新验证邮箱（换绑场景）
+    if (to.name !== 'VerifyEmail') {
+      return next({ name: 'Home' })
+    }
   }
 
   // 3. 🛡️ 权限检查

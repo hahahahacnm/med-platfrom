@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NButton, useMessage, NTag, NIcon, NModal } from 'naive-ui'
+import { NButton, useMessage, NTag, NIcon, NModal, NDivider } from 'naive-ui'
+import { RefreshOutline } from '@vicons/ionicons5'
 import request from '../utils/request'
 
 const props = defineProps<{
@@ -9,6 +10,7 @@ const props = defineProps<{
   index?: number    
   isChild?: boolean 
   showSharedHeader?: boolean 
+  showTypeTag?: boolean
 }>()
 
 const emit = defineEmits(['answer-result'])
@@ -52,7 +54,7 @@ const initData = () => {
   }
 }
 
-watch(() => props.question, () => { initData() }, { immediate: true })
+watch(() => props.question.id, () => { initData() }, { immediate: true })
 
 // 判断主观题
 const isSubjective = computed(() => {
@@ -66,37 +68,66 @@ const isSubjective = computed(() => {
 
 const isB1Child = computed(() => !!props.sharedOptions)
 
+// 🔥🔥🔥 核心性能优化：缓存文本格式化，告别正则地狱 🔥🔥🔥
+const formatText = (text: string) => {
+  if (!text) return ''
+  let res = text.replace(/!\[(.*?)\]\((.*?)\)/g, (match, alt, url) => {
+      const fullUrl = url.startsWith('http') ? url : `http://localhost:8080${url}`
+      return `<img src="${fullUrl}" class="zoom-image" title="点击查看大图" />`
+  })
+  res = res.replace(/\[图片:(.*?)\]/g, (match, url) => {
+      const fullUrl = url.startsWith('http') ? url : `http://localhost:8080${url}`
+      return `<img src="${fullUrl}" class="zoom-image" title="点击查看大图" />`
+  })
+  return res
+}
+
+// 预先计算并缓存所有可能用到的富文本内容，避免每次渲染都执行正则
+const parsedStem = computed(() => formatText(props.question.stem))
+const parsedAnalysis = computed(() => formatText(result.value?.analysis || props.question.analysis || '暂无解析'))
+const parsedCorrect = computed(() => formatText(props.question.correct || '略'))
+
 const displayOptions = computed(() => {
   const opts = props.question.options || props.sharedOptions
   if (!opts) return []
-  return Object.keys(opts).sort().map(key => ({ key: key, value: opts[key] }))
+  return Object.keys(opts).sort().map(key => ({ 
+      key: key, 
+      value: opts[key],
+      parsedValue: formatText(opts[key]) // 缓存选项的 HTML
+  }))
 })
 
 const sharedOptionsList = computed(() => {
   if (!props.sharedOptions) return []
-  return Object.keys(props.sharedOptions).sort().map(key => ({ key: key, value: props.sharedOptions[key] }))
+  return Object.keys(props.sharedOptions).sort().map(key => ({ 
+      key: key, 
+      value: props.sharedOptions[key],
+      parsedValue: formatText(props.sharedOptions[key]) // 缓存 B1 公共选项的 HTML
+  }))
 })
 
-// 🔥🔥🔥 修复点：统一样式，不再区别对待子题括号 🔥🔥🔥
 const indexLabel = computed(() => {
   if (!props.index) return ''
-  
-  // 🔥🔥🔥 核心修改：如果是子题目，显示 (1)，否则显示 1. 🔥🔥🔥
-  if (props.isChild) {
-    return `(${props.index})`
-  }
-  
-  return `${props.index}.`
+  return props.isChild ? `(${props.index})` : `${props.index}.`
+})
+
+const tagTypeComputed = computed(() => {
+    const t = props.question.type || ''
+    if (!t) return 'default'
+    if (t.includes('A3') || t.includes('A4') || t.includes('案例')) return 'info'
+    if (t.includes('B1')) return 'warning'
+    return 'success' 
 })
 
 const handleRedo = async () => {
   try {
     await request.delete(`/questions/${props.question.id}/reset`)
-    message.success('已重置')
+    message.success('已重置此题')
     selectedOption.value = ''
     multiSelection.value = []
     result.value = null
     showAnswer.value = false
+    emit('answer-result', { id: props.question.id, isCorrect: null }) // 重置答题卡颜色
   } catch (e) { console.error(e) }
 }
 
@@ -143,11 +174,6 @@ const getBtnType = (key: string) => {
   return 'default'
 }
 
-const formatText = (text: string) => {
-  if (!text) return ''
-  return text.replace(/\[图片:(.*?)\]/g, '<img src="$1" class="zoom-image" title="点击查看大图" />')
-}
-
 const handleContentClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
   if (target.tagName === 'IMG' && target.classList.contains('zoom-image')) {
@@ -167,16 +193,25 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
       <div class="shared-list">
         <div v-for="opt in sharedOptionsList" :key="opt.key" class="shared-item">
           <span class="shared-key">{{ opt.key }}.</span>
-          <span class="shared-value" v-html="formatText(opt.value)"></span>
+          <span class="shared-value" v-html="opt.parsedValue"></span>
         </div>
       </div>
     </div>
 
+    <div class="q-header-row" v-if="showTypeTag || isMultiChoice || result">
+        <div class="left-badges">
+            <n-tag v-if="showTypeTag" :type="tagTypeComputed" size="small" round strong>{{ question.type || '题型' }}</n-tag>
+            <n-tag v-if="isMultiChoice" type="warning" size="small">多选</n-tag>
+        </div>
+        
+        <div v-if="result" class="redo-btn" @click.stop="handleRedo">
+            <n-icon size="14"><RefreshOutline /></n-icon> 重做
+        </div>
+    </div>
+
     <div class="q-stem">
       <span class="q-index">{{ indexLabel }}</span>
-      <n-tag v-if="isMultiChoice" type="warning" size="small" style="margin-right: 6px; vertical-align: text-bottom;">多选</n-tag>
-      <span class="q-text" v-html="formatText(question.stem)"></span>
-      <a v-if="result" class="redo-link" @click.stop="handleRedo">重做</a>
+      <span class="q-text" v-html="parsedStem"></span>
     </div>
 
     <div v-if="isSubjective" style="margin: 10px 0 0 24px;">
@@ -200,7 +235,7 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
         @click="handleOptionClick(opt.key)"
       >
         <div class="opt-circle">{{ opt.key }}</div>
-        <div class="opt-content" v-html="formatText(opt.value)"></div>
+        <div class="opt-content" v-html="opt.parsedValue"></div>
       </div>
 
       <div v-if="isMultiChoice && !result" style="margin-top: 10px; margin-left: 10px;">
@@ -229,10 +264,10 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
       <div class="analysis-body">
         <div v-if="isSubjective" class="subjective-ref">
            <div class="label-heading">【参考答案】</div>
-           <div class="text-content" v-html="formatText(question.correct || '略')"></div>
+           <div class="text-content" v-html="parsedCorrect"></div>
         </div>
         <div class="label-heading">【解析】</div>
-        <div class="text-content" v-html="formatText(result?.analysis || question.analysis || '暂无解析')"></div>
+        <div class="text-content" v-html="parsedAnalysis"></div>
       </div>
       
       <div class="meta-footer">
@@ -260,59 +295,257 @@ const shouldShowHeader = computed(() => props.showSharedHeader !== false)
 </template>
 
 <style>
-.zoom-image { max-width: 120px; max-height: 120px; border: 1px solid #e0e0e0; margin: 5px 0; cursor: zoom-in; display: block; border-radius: 4px; }
+/* 🔥 确保图片有合适的样式 */
+.zoom-image { 
+    max-width: 150px; 
+    max-height: 150px; 
+    border: 1px solid #e2e8f0; 
+    margin: 8px 0; 
+    cursor: zoom-in; 
+    display: block; 
+    border-radius: 8px; /* 图片圆角 */
+    vertical-align: bottom; 
+    transition: transform 0.2s;
+}
+.zoom-image:hover { transform: scale(1.05); }
 </style>
 
 <style scoped>
-.exam-item { padding: 24px 0; border-bottom: 1px solid #eee; position: relative; }
+.exam-item { 
+    padding: 24px 0; 
+    border-bottom: 1px dashed #e2e8f0; 
+    position: relative; 
+}
+.exam-item:last-child { border-bottom: none; }
 
-.shared-options-box { background-color: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 6px; padding: 12px 16px; margin-bottom: 20px; }
-.shared-title { font-weight: bold; color: #0c4a6e; margin-bottom: 8px; font-size: 14px; }
-.shared-list { display: flex; flex-direction: column; gap: 6px; }
-.shared-item { font-size: 15px; color: #333; line-height: 1.5; display: flex; }
-.shared-key { font-weight: bold; margin-right: 8px; min-width: 20px; color: #0ea5e9; }
+/* 🔗 B1 共用选项 */
+.shared-options-box { 
+    background-color: #f8fafc; 
+    border: 1px solid #e2e8f0; 
+    border-radius: 16px; 
+    padding: 16px 20px; 
+    margin-bottom: 24px; 
+}
+.shared-title { 
+    font-weight: 700; 
+    color: #0f172a; 
+    margin-bottom: 12px; 
+    font-size: 14px; 
+}
+.shared-list { display: flex; flex-direction: column; gap: 8px; }
+.shared-item { 
+    font-size: 15px; 
+    color: #334155; 
+    line-height: 1.6; 
+    display: flex; 
+    align-items: baseline;
+}
+.shared-key { 
+    font-weight: 700; 
+    margin-right: 8px; 
+    min-width: 24px; 
+    color: #3b82f6; 
+}
+.shared-value { flex: 1; }
 
-.q-stem { font-size: 16px; line-height: 1.6; color: #2c3e50; margin-bottom: 16px; padding-right: 10px; }
-.q-index { font-weight: bold; margin-right: 5px; color: #000; }
-.redo-link { float: right; font-size: 13px; color: #999; cursor: pointer; text-decoration: underline; margin-left: 10px; }
-.redo-link:hover { color: #f0a020; }
+/* 📝 题干 */
+.q-stem { 
+    font-size: 16px; 
+    line-height: 1.75; 
+    color: #1e293b; 
+    margin-bottom: 20px; 
+    padding-right: 12px; 
+    font-weight: 500;
+}
+.q-index { 
+    font-weight: 700; 
+    margin-right: 8px; 
+    color: #3b82f6; 
+    font-size: 18px;
+}
 
-.b1-selector-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; margin-left: 20px; }
-.opt-btn-large { width: 36px; height: 36px; font-size: 15px; font-weight: 600; }
+/* 🏷️ 头部标签行 */
+.q-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    height: 28px; /* Fixed height for consistency */
+}
+.left-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
 
-.q-options { display: flex; flex-direction: column; gap: 8px; }
-.opt-row { display: flex; align-items: flex-start; padding: 10px 12px; cursor: pointer; border-radius: 6px; transition: all 0.1s; border: 1px solid transparent; }
-.opt-row:hover { background-color: #f5f7fa; }
-.opt-circle { width: 28px; height: 28px; border: 1px solid #dcdfe6; border-radius: 50%; text-align: center; line-height: 26px; font-size: 14px; color: #606266; margin-right: 12px; flex-shrink: 0; background-color: #fff; font-weight: 500; }
-.opt-content { font-size: 15px; color: #333; line-height: 1.8; margin-top: -2px; }
+.redo-btn { 
+    /* float: right; Removed float */
+    font-size: 12px; 
+    color: #64748b; 
+    cursor: pointer; 
+    /* margin-left: 12px; */
+    transition: all 0.2s;
+    background-color: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+}
+.redo-btn:hover { 
+    color: #fff; 
+    background-color: #f59e0b; 
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(245, 158, 11, 0.3);
+}
 
-.opt-selected .opt-circle { border-color: #18a058; color: #18a058; background-color: #eafbf2; }
-.opt-selected { background-color: #f0fdf4; border-color: #bbf7d0; }
+/* 🔘 B1 选择器 */
+.b1-selector-row { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; margin-left: 24px; }
+.opt-btn-large { width: 40px; height: 40px; font-size: 16px; font-weight: 600; }
 
-.opt-wrong .opt-circle { border-color: #d03050; color: #d03050; background-color: #fef0f0; }
-.opt-wrong .opt-content { color: #d03050; }
-.opt-correct .opt-circle { background-color: #18a058; border-color: #18a058; color: #fff; }
-.opt-correct .opt-content { color: #18a058; font-weight: 600; }
+/* ✅ 选项列表 */
+.q-options { display: flex; flex-direction: column; gap: 12px; }
+.opt-row { 
+    display: flex; 
+    align-items: flex-start; 
+    padding: 12px 16px; 
+    cursor: pointer; 
+    border-radius: 12px; 
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+    border: 1px solid transparent; 
+    background-color: #fff;
+}
+.opt-row:hover { 
+    background-color: #f8fafc; 
+    border-color: #e2e8f0;
+    transform: translateX(4px);
+}
+.opt-circle { 
+    width: 32px; 
+    height: 32px; 
+    border: 2px solid #cbd5e1; 
+    border-radius: 50%; 
+    text-align: center; 
+    line-height: 28px; 
+    font-size: 15px; 
+    color: #64748b; 
+    margin-right: 16px; 
+    flex-shrink: 0; 
+    background-color: #fff; 
+    font-weight: 600; 
+    transition: all 0.2s;
+}
+.opt-content { 
+    font-size: 15px; 
+    color: #334155; 
+    line-height: 1.8; 
+    margin-top: 2px; 
+    flex: 1;
+}
 
-.analysis-panel { margin-top: 20px; background-color: #fff; border-radius: 8px; border: 1px solid #ebebeb; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.02); }
-.result-bar { display: flex; gap: 20px; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; }
-.bar-success { background-color: #f0fdf4; border-bottom-color: #dcfce7; }
-.bar-error { background-color: #fef2f2; border-bottom-color: #fee2e2; }
-.res-item { display: flex; align-items: baseline; gap: 6px; font-size: 15px; }
-.res-label { color: #666; font-weight: bold; }
-.res-val { font-weight: 900; font-family: Arial; font-size: 16px; }
-.res-val.green { color: #18a058; }
-.res-val.red { color: #d03050; }
-.res-text-hint { font-size: 14px; color: #666; font-weight: normal; margin-left: 4px; }
+/* 选中状态 */
+.opt-selected { background-color: #eff6ff; border-color: #bfdbfe; }
+.opt-selected .opt-circle { 
+    border-color: #3b82f6; 
+    color: #fff; 
+    background-color: #3b82f6; 
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+}
+.opt-selected .opt-content { color: #1e3a8a; font-weight: 500; }
 
-.analysis-body { padding: 16px; color: #333; }
-.label-heading { font-weight: bold; font-size: 14px; color: #333; margin-bottom: 8px; border-left: 3px solid #2080f0; padding-left: 8px; line-height: 1; }
-.subjective-ref { margin-bottom: 16px; }
-.text-content { font-size: 14px; line-height: 1.7; color: #444; text-align: justify; }
+/* 错误状态 */
+.opt-wrong { background-color: #fef2f2; border-color: #fecaca; }
+.opt-wrong .opt-circle { 
+    border-color: #ef4444; 
+    color: #fff; 
+    background-color: #ef4444; 
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+}
+.opt-wrong .opt-content { color: #991b1b; }
 
-.meta-footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background-color: #fafafa; border-top: 1px solid #eee; font-size: 12px; color: #999; }
-.meta-group { display: flex; align-items: center; gap: 8px; }
+/* 正确状态 */
+.opt-correct { background-color: #f0fdf4; border-color: #bbf7d0; }
+.opt-correct .opt-circle { 
+    background-color: #10b981; 
+    border-color: #10b981; 
+    color: #fff; 
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+.opt-correct .opt-content { color: #065f46; font-weight: 600; }
+
+/* 💡 解析面板 */
+.analysis-panel { 
+    margin-top: 24px; 
+    background-color: #fff; 
+    border-radius: 16px; 
+    border: 1px solid #f1f5f9; 
+    overflow: hidden; 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+    transition: all 0.3s;
+}
+.analysis-panel:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.06); }
+
+.result-bar { 
+    display: flex; 
+    gap: 32px; 
+    padding: 16px 24px; 
+    border-bottom: 1px solid #f1f5f9; 
+    align-items: center;
+}
+.bar-success { background: linear-gradient(to right, #f0fdf4, #fff); border-left: 6px solid #10b981; }
+.bar-error { background: linear-gradient(to right, #fef2f2, #fff); border-left: 6px solid #ef4444; }
+
+.res-item { display: flex; align-items: baseline; gap: 8px; font-size: 15px; }
+.res-label { color: #64748b; font-weight: 600; }
+.res-val { font-weight: 800; font-family: 'Roboto Mono', monospace; font-size: 18px; }
+.res-val.green { color: #10b981; text-shadow: 0 1px 2px rgba(16, 185, 129, 0.1); }
+.res-val.red { color: #ef4444; text-shadow: 0 1px 2px rgba(239, 68, 68, 0.1); }
+.res-text-hint { font-size: 14px; color: #475569; font-weight: 500; }
+
+.analysis-body { padding: 24px; color: #334155; }
+.label-heading { 
+    font-weight: 700; 
+    font-size: 15px; 
+    color: #1e293b; 
+    margin-bottom: 12px; 
+    display: flex;
+    align-items: center;
+}
+.label-heading::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    background-color: #3b82f6;
+    margin-right: 8px;
+    border-radius: 2px;
+}
+.subjective-ref { margin-bottom: 24px; }
+.text-content { 
+    font-size: 15px; 
+    line-height: 1.8; 
+    color: #475569; 
+    text-align: justify; 
+}
+
+.meta-footer { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 12px 24px; 
+    background-color: #f8fafc; 
+    border-top: 1px solid #f1f5f9; 
+    font-size: 13px; 
+    color: #94a3b8; 
+}
+.meta-group { display: flex; align-items: center; gap: 12px; }
 
 .img-preview-box { display: flex; justify-content: center; align-items: center; cursor: zoom-out; }
-.img-preview-box img { max-width: 90vw; max-height: 90vh; box-shadow: 0 5px 20px rgba(0,0,0,0.5); border-radius: 4px; }
+.img-preview-box img { 
+    max-width: 90vw; 
+    max-height: 90vh; 
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3); 
+    border-radius: 12px; 
+}
 </style>

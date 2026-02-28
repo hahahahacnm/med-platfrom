@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch, h } from 'vue'
+import { ref, onMounted, computed, h, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import request from '../utils/request'
 import { 
   NLayout, NLayoutSider, NLayoutContent, 
   NTree, NSpin, NEmpty, NButton, NPageHeader, NTag,
-  NPopconfirm, NSpace, NIcon, useMessage, NBackTop, NInput, NSelect
+  NPopconfirm, NIcon, useMessage, NInput, NSelect, NTooltip,
+  NDrawer, NDrawerContent, NProgress, NText, NNumberAnimation // 🔥 增加数字动画增强体验
 } from 'naive-ui'
 import { 
-  SearchOutline, LibraryOutline, HomeOutline
+  SearchOutline, LibraryOutline, PushOutline, Push, 
+  MenuOutline, ListOutline, RefreshOutline,
+  ChevronBackOutline, ChevronForwardOutline, AnalyticsOutline
 } from '@vicons/ionicons5'
 import QuestionCard from '../components/QuestionCard.vue'
 
@@ -18,54 +21,99 @@ const userStore = useUserStore()
 const message = useMessage()
 
 // =======================
-// 1. 状态定义
+// 1. 核心状态定义
 // =======================
 const treeData = ref<any[]>([]) 
-const visibleQuestions = ref<any[]>([]) 
-const globalSheetItems = ref<any[]>([]) 
+const expandedKeys = ref<any[]>([]) 
 
 const loadingTree = ref(false)  
-const loadingQuestions = ref(false) 
+const loadingSkeleton = ref(false)
+const loadingDetail = ref(false)
+
 const currentCategory = ref('') 
-const hasMore = ref(true) 
 const searchKeyword = ref('')
 const isSearching = ref(false)
+
 const bankOptions = ref<any[]>([]) 
 const currentBank = ref<string | null>(null)
-const answerStatusMap = ref<Record<string, boolean>>({}) 
-const loadTrigger = ref<HTMLElement | null>(null)
-let observer: IntersectionObserver | null = null
-const globalQuestionCounter = ref(0) 
-const pagination = ref({ page: 1, pageSize: 200, itemCount: 0 })
+
+const skeletonList = ref<any[]>([]) 
+const currentIndex = ref(0)         
+const currentDetail = ref<any>(null)
+
+// 🔥 新增：本章科学统计数据
+const chapterSummary = ref<{
+  correct_num: number;
+  attempted_num: number;
+  total_num: number;
+  accuracy_rate: string;
+  mastery_rate: string;
+} | null>(null)
+
+const isMobile = ref(false)
+const mobileLeftOpen = ref(false)
+const mobileRightOpen = ref(false)
+const leftCollapsed = ref(false) 
+const leftPinned = ref(true)
+const rightCollapsed = ref(true)
+const rightPinned = ref(false)
+const isDropdownOpen = ref(false)
+
+const checkMobile = () => { isMobile.value = window.innerWidth <= 768 }
+
+const handleLeftEnter = () => { if (!leftPinned.value) leftCollapsed.value = false }
+const handleLeftLeave = () => { if (!leftPinned.value && !isDropdownOpen.value) {leftCollapsed.value = true }}
+const toggleLeftPin = () => { leftPinned.value = !leftPinned.value; leftCollapsed.value = !leftPinned.value }
+
+const handleRightEnter = () => { if (!rightPinned.value) rightCollapsed.value = false }
+const handleRightLeave = () => { if (!rightPinned.value) rightCollapsed.value = true }
+const toggleRightPin = () => { rightPinned.value = !rightPinned.value; rightCollapsed.value = !rightPinned.value }
 
 // =======================
-// 2. 核心逻辑：数据适配与加载
+// 2. 目录树渲染引擎
 // =======================
+const renderTreeLabel = ({ option }: { option: any }) => {
+  const total = option.total_count || 0
+  const done = option.done_count || 0
+  const percentage = total > 0 ? Math.round((done / total) * 100) : 0
+  const status = percentage >= 100 ? 'success' : 'default'
+  const isLong = option.label.length > 8
+
+  return h(
+    'div',
+    { style: 'display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 0; overflow: hidden;' },
+    [
+      h('div', { 
+        style: {
+          flex: 1, marginRight: '12px', fontSize: isLong ? '12px' : '13.5px',
+          lineHeight: '1.25', color: '#334155', fontWeight: '500',
+          display: '-webkit-box', '-webkit-line-clamp': '2', '-webkit-box-orient': 'vertical',
+          overflow: 'hidden', wordBreak: 'break-all'
+        }
+      }, option.label),
+      h('div', { style: 'display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; min-width: 48px;' }, [
+        h(NText, { depth: 3, style: 'font-size: 10px; font-family: monospace; color: #94a3b8; transform: scale(0.9);' }, () => `${done}/${total}`),
+        h('div', { style: 'width: 36px' }, [
+          h(NProgress, { type: 'line', percentage: percentage, showIndicator: false, height: 3.5, borderRadius: 2, status: status, processing: percentage > 0 && percentage < 100 })
+        ])
+      ])
+    ]
+  )
+}
 
 const adaptData = (list: any[], parentPath = '') => {
   return list.map(item => {
     let currentFull = item.full
-    if (!currentFull) {
-        currentFull = parentPath ? `${parentPath} > ${item.name}` : item.name
-    }
-    return {
-        key: item.id,
-        label: item.name,
-        full: currentFull, 
-        isLeaf: item.is_leaf,
-        children: null 
-    }
+    if (!currentFull) { currentFull = parentPath ? `${parentPath} > ${item.name}` : item.name }
+    return { key: item.id, label: item.name, full: currentFull, level: item.level, isLeaf: item.is_leaf, total_count: item.total_count, done_count: item.done_count, children: null }
   })
 }
 
 const fetchBanks = async () => {
   try {
     const res: any = await request.get('/banks')
-    const list = res.data || []
-    bankOptions.value = list.map((item: string) => ({ label: item, value: item }))
-    if (!currentBank.value && bankOptions.value.length > 0) { 
-        currentBank.value = bankOptions.value[0].value 
-    }
+    bankOptions.value = (res.data || []).map((item: string) => ({ label: item, value: item }))
+    if (!currentBank.value && bankOptions.value.length > 0) currentBank.value = bankOptions.value[0].value 
   } catch (e) { console.error(e) }
 }
 
@@ -81,389 +129,445 @@ const fetchTreeRoot = async () => {
 const handleLoad = async (node: any) => {
   return new Promise<void>(async (resolve) => {
     try {
-      const res: any = await request.get('/category-tree', { 
-          params: { parent_id: node.key, source: currentBank.value }
-      })
-      const currentPath = node.full || node.label
-      node.children = adaptData(res.data || [], currentPath)
+      const res: any = await request.get('/category-tree', { params: { parent_id: node.key, source: currentBank.value } })
+      node.children = adaptData(res.data || [], node.full || node.label)
       resolve()
-    } catch (e) { 
-        node.children = []
-        resolve() 
-    }
+    } catch (e) { node.children = []; resolve() }
   })
 }
 
 const handleBankChange = (val: string) => { 
-    currentBank.value = val
-    resetState()
-    treeData.value = []
-    fetchTreeRoot() 
+  currentBank.value = val; resetState(); treeData.value = []
+  if (!isMobile.value) { leftPinned.value = true; leftCollapsed.value = false }
+  fetchTreeRoot() 
 }
 
-const handleNodeClick = (keys: any, option: any) => {
-  if (!option || option.length === 0) return
-  const node = option[0]
-  resetState()
-  currentCategory.value = node.full || node.label 
-  fetchQuestions(false) 
+// 1. 修改点击逻辑：不要在这里立即设置 currentCategory
+const handleNodeClick = (keys: any[], option: any[]) => {
+  if (!option || option.length === 0) return;
+  const node = option[0];
+  
+  // 仅获取目标分类名，先不赋值给响应式变量 currentCategory，防止 UI 标题抢跑
+  const targetCategory = node.full || node.label;
+  
+  if (!isMobile.value) leftPinned.value = false;
+  else mobileLeftOpen.value = false;
+  
+  if (!expandedKeys.value.includes(node.key)) expandedKeys.value.push(node.key);
+  
+  // 将目标传递给 fetch 函数
+  fetchQuestions(targetCategory); 
 }
 
 const resetState = () => {
-  searchKeyword.value = ''
-  isSearching.value = false
-  currentCategory.value = ''
-  pagination.value.page = 1 
-  hasMore.value = true
-  answerStatusMap.value = {}
-  visibleQuestions.value = []
-  globalSheetItems.value = []
-  globalQuestionCounter.value = 0 
+  searchKeyword.value = ''; 
+  isSearching.value = false; 
+  currentCategory.value = ''; // 重置后标题会消失，显示 n-empty
+  skeletonList.value = []; 
+  currentIndex.value = 0; 
+  currentDetail.value = null; 
+  chapterSummary.value = null;
 }
 
-const fetchQuestions = async (isLoadMore = false, specificPage?: number) => {
-  if (!currentCategory.value && !searchKeyword.value) return
-  if (loadingQuestions.value) return 
-  if (isLoadMore && !hasMore.value) return 
-
-  loadingQuestions.value = true
-  const requestPage = specificPage || pagination.value.page
-
+// 2. 修改获取逻辑：请求成功后再更新 UI 状态
+const fetchQuestions = async (targetCat?: string) => {
+  // 确定要请求的分类：如果是点击触发则用传入的 targetCat，否则用现有的
+  const catName = targetCat || currentCategory.value;
+  if (!catName && !searchKeyword.value) return;
+  
+  loadingSkeleton.value = true;
   try {
-    const params: any = { page: requestPage, page_size: pagination.value.pageSize }
-    if (currentBank.value) params.source = currentBank.value
-    
-    if (searchKeyword.value.trim()) { 
-        params.q = searchKeyword.value.trim()
-        isSearching.value = true 
-    } else { 
-        params.category = currentCategory.value 
-        isSearching.value = false 
-    }
-
-    const res: any = await request.get('/questions', { params })
-    const newRawList = res.data || []
-    
-    if (!isLoadMore && !specificPage) {
-      visibleQuestions.value = []
-      globalSheetItems.value = []
-      globalQuestionCounter.value = 0
-      pagination.value.itemCount = res.total || 0 
-      document.querySelector('#question-scroll-container')?.scrollTo(0, 0)
-    }
-
-    if (newRawList.length < pagination.value.pageSize) hasMore.value = false; else hasMore.value = true
-    
-    syncInitialStatus(newRawList)
-    const sortedBatch = sortBatch([...newRawList])
-    
-    const processedBatch = sortedBatch.map((q: any) => {
-        const domId = `question-anchor-${q.id}`
-        let displayIndex = 0
-        if (q.children && q.children.length > 0) {
-            q.children = q.children.map((child: any) => {
-                globalQuestionCounter.value++ 
-                return { ...child, displayIndex: globalQuestionCounter.value }
-            })
-            displayIndex = q.children[0].displayIndex 
-        } else {
-            globalQuestionCounter.value++
-            displayIndex = globalQuestionCounter.value
-        }
-        return { ...q, displayIndex, domId }
-    })
-
-    if (!specificPage) {
-        processedBatch.forEach(item => {
-            if (item.children && item.children.length > 0) {
-                item.children.forEach((child: any) => {
-                    globalSheetItems.value.push({
-                        id: child.id,
-                        type: item.type,
-                        displayIndex: child.displayIndex,
-                        domId: `question-anchor-${child.id}`,
-                        parentId: item.id
-                    })
-                })
-            } else {
-                globalSheetItems.value.push({ id: item.id, type: item.type, displayIndex: item.displayIndex, domId: item.domId })
-            }
-        })
-    }
-
-    if (specificPage) {
-        visibleQuestions.value = processedBatch
-        pagination.value.page = specificPage 
+    if (isSearching.value && searchKeyword.value) {
+      const res: any = await request.get('/questions', { params: { q: searchKeyword.value, source: currentBank.value, page: 1, page_size: 100 } });
+      skeletonList.value = (res.data || []).map((q: any, idx: number) => ({ id: q.id, type: q.type, status: q.user_record ? (q.user_record.is_correct ? 'correct' : 'wrong') : 'unfilled', displayIndex: idx + 1, _fullData: q }));
+      chapterSummary.value = null;
     } else {
-        visibleQuestions.value.push(...processedBatch)
-        const MAX_DOM_Nodes = 500
-        if (visibleQuestions.value.length > MAX_DOM_Nodes) {
-            visibleQuestions.value.splice(0, visibleQuestions.value.length - 400)
-        }
+      const res: any = await request.get('/questions/skeleton', { params: { category: catName, source: currentBank.value } });
+      
+      // 🔥 关键改动点：只有当请求成功（不报 403/500）到达这里时，才正式更新标题和数据
+      currentCategory.value = catName; 
+      skeletonList.value = (res.data || []).map((q: any, idx: number) => ({ ...q, displayIndex: idx + 1 }));
+      chapterSummary.value = res.summary || null;
     }
-  } catch (e) { console.error(e) } finally { loadingQuestions.value = false }
+    
+    if (skeletonList.value.length > 0) await loadQuestionDetail(0);
+  } catch (e) {
+    // 🔥 关键改动点：如果请求失败（如 403 Forbidden），执行 resetState()
+    // 这会清空 currentCategory，使 UI 自动退回到“请选择章节”的 <n-empty> 状态
+    resetState();
+    console.error('获取题目失败', e);
+  } finally {
+    loadingSkeleton.value = false;
+  }
 }
 
-const handleSheetJump = async (item: any) => {
-    let el = document.getElementById(item.domId)
-    if (!el && item.parentId) {
-        const parentDomId = `question-anchor-${item.parentId}`
-        el = document.getElementById(parentDomId)
-    }
-    if (el) { 
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        el.classList.add('highlight-flash')
-        setTimeout(() => el?.classList.remove('highlight-flash'), 1500)
-        return 
-    }
-    message.info("题目可能在之前的页面，请尝试重新加载章节") 
+const loadQuestionDetail = async (index: number) => {
+  if (index < 0 || index >= skeletonList.value.length) return
+  currentIndex.value = index
+  const targetItem = skeletonList.value[index]
+  if (targetItem._fullData) {
+    currentDetail.value = targetItem._fullData; currentDetail.value.displayIndex = targetItem.displayIndex
+    document.querySelector('#question-scroll-container')?.scrollTo(0, 0); return
+  }
+  loadingDetail.value = true
+  try {
+    const res: any = await request.get(`/questions/${targetItem.id}`)
+    currentDetail.value = res.data; currentDetail.value.displayIndex = targetItem.displayIndex
+    document.querySelector('#question-scroll-container')?.scrollTo(0, 0)
+  } catch(e) { message.error('加载单题失败') } finally { loadingDetail.value = false }
 }
 
-const TypePriority: Record<string, number> = { 'A1型题': 1, 'A2型题': 2, 'A3/A4型题': 3, 'B1型题': 4, 'X型题': 5, '简答题': 6, '名词解释': 7, '问答题': 8, '论述题': 9, '案例分析题': 10 }
-const getStandardTypeName = (rawType: string) => { const t = (rawType || '').toUpperCase(); if (t.includes('A1')) return 'A1型题'; if (t.includes('A2')) return 'A2型题'; if (t.includes('A3') || t.includes('A4')) return 'A3/A4型题'; if (t.includes('B1')) return 'B1型题'; if (t.includes('X')) return 'X型题'; return t || '其他题型' }
-const sortBatch = (list: any[]) => { return list.sort((a: any, b: any) => { const nameA = getStandardTypeName(a.type); const nameB = getStandardTypeName(b.type); return (TypePriority[nameA] || 999) - (TypePriority[nameB] || 999) }) }
+// 🔥 核心逻辑：本地实时重算正确率
+const onAnswerResult = (payload: { id: number, isCorrect: boolean }) => {
+  const item = skeletonList.value[currentIndex.value]
+  if (!item || !chapterSummary.value) return
+  
+  const oldStatus = item.status
+  
+  if (oldStatus === 'unfilled') {
+    item.status = payload.isCorrect ? 'correct' : 'wrong'
+    chapterSummary.value.attempted_num++ // 第一次做，已做数+1
+    if (payload.isCorrect) chapterSummary.value.correct_num++ // 且做对了，正确数+1
+    updateTreeCount(treeData.value, currentCategory.value)
+  } else if (oldStatus === 'wrong' && payload.isCorrect) {
+    // 之前错了，现在重做对了
+    item.status = 'correct'
+    chapterSummary.value.correct_num++
+  } else if (oldStatus === 'correct' && !payload.isCorrect) {
+    // 之前对了，现在重做错了 (极少见但需兼容)
+    item.status = 'wrong'
+    chapterSummary.value.correct_num--
+  }
 
-const onAnswerResult = (payload: { id: string, isCorrect: boolean }) => { answerStatusMap.value[payload.id] = payload.isCorrect }
-const syncInitialStatus = (list: any[]) => { list.forEach(q => { if (q.user_record) { answerStatusMap.value[q.id] = q.user_record.is_correct } ; if (q.children) { q.children.forEach((child: any) => { if (child.user_record) { answerStatusMap.value[child.id] = child.user_record.is_correct } }) } }) }
+  // 实时重新计算百分比
+  const s = chapterSummary.value
+  s.accuracy_rate = s.attempted_num > 0 ? ((s.correct_num / s.attempted_num) * 100).toFixed(1) : "0.0"
+  s.mastery_rate = s.total_num > 0 ? ((s.correct_num / s.total_num) * 100).toFixed(1) : "0.0"
+}
+
+const updateTreeCount = (nodes: any[], targetFull: string) => {
+  for (let node of nodes) {
+    if (node.full === targetFull) { node.done_count = (node.done_count || 0) + 1; return true }
+    if (node.children && updateTreeCount(node.children, targetFull)) return true
+  }
+  return false
+}
+
+const handlePageJump = (idx: number) => { if (isMobile.value) mobileRightOpen.value = false; loadQuestionDetail(idx) }
+const goPrev = () => { if (currentIndex.value > 0) loadQuestionDetail(currentIndex.value - 1) }
+const goNext = () => { if (currentIndex.value < skeletonList.value.length - 1) loadQuestionDetail(currentIndex.value + 1) }
+
+const handleResetChapter = async () => {
+  try {
+    await request.post('/questions/reset-chapter', { category: currentCategory.value, source: currentBank.value })
+    message.success('本章答题记录已清空'); fetchQuestions()
+  } catch (e) { message.error('清空记录失败') }
+}
+
+const handleSearch = () => { if (searchKeyword.value) { isSearching.value = true; fetchQuestions() } }
+
+const getStandardTypeName = (rawType: string) => { 
+  const t = (rawType || '').toUpperCase(); 
+  if (t.includes('A1')) return 'A1型题'; if (t.includes('A2')) return 'A2型题'; if (t.includes('A3') || t.includes('A4')) return 'A3/A4型题'; if (t.includes('B1')) return 'B1型题'; if (t.includes('X')) return 'X型题'; return rawType || '其他题型' 
+}
+const TypePriority: Record<string, number> = { 'A1型题': 1, 'A2型题': 2, 'A3/A4型题': 3, 'B1型题': 4, 'X型题': 5, '简答题': 6 }
 
 const answerSheetItems = computed(() => {
-  if (!globalSheetItems.value.length) return []
+  if (!skeletonList.value.length) return []
   const groups: Record<string, any[]> = {}
-  globalSheetItems.value.forEach(item => { 
-      const s = getStandardTypeName(item.type); 
-      if (!groups[s]) groups[s] = []; 
-      groups[s].push({ globalIndex: item.displayIndex, domId: item.domId, id: item.id, status: getSheetStatus(item.id), raw: item }) 
+  skeletonList.value.forEach((item, realIndex) => { 
+    const s = getStandardTypeName(item.type); if (!groups[s]) groups[s] = []; groups[s].push({ ...item, skeletonIndex: realIndex }) 
   })
   const sortedTypes = Object.keys(groups).sort((a, b) => (TypePriority[a] || 999) - (TypePriority[b] || 999))
   const items: any[] = []
   sortedTypes.forEach(type => { 
-      items.push({ isHeader: true, type: type, key: `header-${type}` }); 
-      groups[type].forEach(q => { items.push({ isHeader: false, globalIndex: q.globalIndex, domId: q.domId, key: `sheet-${q.id}`, status: q.status, raw: q }) }) 
+    items.push({ isHeader: true, type: type, key: `header-${type}` }); 
+    groups[type]?.forEach(q => { items.push({ isHeader: false, globalIndex: q.displayIndex, skeletonIndex: q.skeletonIndex, status: q.status, id: q.id, key: `sheet-${q.id}` }) }) 
   })
   return items
 })
 
-const getSheetStatus = (id: string) => { const s = answerStatusMap.value[id]; if (s === undefined) return 'none'; return s ? 'correct' : 'wrong' }
-
-const handleSearch = () => { const val = searchKeyword.value.trim(); if (!val) { message.warning('请输入关键词'); return }; resetState(); searchKeyword.value = val; fetchQuestions(false) }
-const clearSearch = () => { resetState(); fetchQuestions(false) }
-
-const handleResetChapter = async () => { if (!currentCategory.value) return; try { await request.delete('/answers/reset-chapter', { params: { category: currentCategory.value } }); message.success('已清空'); resetState(); fetchQuestions(false) } catch (e) { console.error(e) } }
-
-const setupIntersectionObserver = () => { 
-    if (observer) observer.disconnect(); 
-    observer = new IntersectionObserver((entries) => { if (entries[0].isIntersecting && hasMore.value && !loadingQuestions.value) { pagination.value.page++; fetchQuestions(true) } }, { root: null, threshold: 0.1, rootMargin: '200px' }); 
-    if (loadTrigger.value) observer.observe(loadTrigger.value) 
-}
-
-onMounted(async () => { 
-    await fetchBanks(); 
-    if (currentBank.value) fetchTreeRoot(); 
-    nextTick(() => { setupIntersectionObserver() }) 
+onMounted(async () => {
+  checkMobile(); window.addEventListener('resize', checkMobile); await fetchBanks(); 
+  if (currentBank.value) { fetchTreeRoot(); if (!isMobile.value && !currentCategory.value) { leftPinned.value = true; leftCollapsed.value = false } }
 })
-
-watch(() => visibleQuestions.value.length, () => { nextTick(() => { if (loadTrigger.value && observer) { observer.disconnect(); observer.observe(loadTrigger.value) } }) })
 </script>
 
 <template>
   <div class="quiz-container">
-    <!-- Header Controls -->
-    <div class="page-control-bar">
-      <div class="left-controls">
-        <h2 class="page-title">
-           <n-icon color="#18a058" style="margin-right: 8px; vertical-align: bottom;"><LibraryOutline /></n-icon>
-           题库练习
-        </h2>
-        
-        <div class="bank-selector">
-          <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="medium">
-            <template #prefix><n-icon><LibraryOutline /></n-icon></template>
-          </n-select>
-        </div>
-      </div>
-
-      <div class="search-box">
-        <n-input v-model:value="searchKeyword" placeholder="搜索题目..." round @keydown.enter="handleSearch" @clear="clearSearch" clearable>
-          <template #prefix><n-icon :component="SearchOutline" /></template>
-        </n-input>
-      </div>
-    </div>
-
-    <!-- Main Layout -->
     <n-layout has-sider class="main-layout-area">
+      
       <n-layout-sider 
-        bordered 
-        collapse-mode="width" 
-        :collapsed-width="0" 
-        :width="280" 
-        show-trigger="arrow-circle" 
-        content-style="padding: 12px;" 
-        :native-scrollbar="false"
-        class="category-sider"
+        v-if="!isMobile" bordered collapse-mode="width" :collapsed-width="36" :width="260" resizable :min-width="220" :max-width="450" :collapsed="leftCollapsed"
+        @mouseenter="handleLeftEnter" @mouseleave="handleLeftLeave" content-style="padding: 0; display: flex; flex-direction: column;" class="category-sider auto-expand-sider"
       >
-        <n-spin :show="loadingTree">
-          <n-tree 
-            block-line 
-            expand-on-click 
-            :data="treeData" 
-            key-field="key" 
-            label-field="label" 
-            children-field="children" 
-            remote
-            :on-load="handleLoad"
-            @update:selected-keys="handleNodeClick" 
-          />
-        </n-spin>
-        <div v-if="treeData.length === 0 && !loadingTree" style="text-align: center; color: #ccc; margin-top: 40px; font-size: 13px;">
-            请先选择题库
+        <div class="collapsed-strip" v-show="leftCollapsed"><n-icon size="20" color="#999"><MenuOutline /></n-icon></div>
+        <div class="expanded-content" v-show="!leftCollapsed">
+          <div class="sider-toolbar">
+            <span class="toolbar-title">章节目录</span>
+            <n-button text size="small" @click="toggleLeftPin" :type="leftPinned ? 'primary' : 'default'"><template #icon><n-icon size="18"><component :is="leftPinned ? Push : PushOutline" /></n-icon></template></n-button>
+          </div>
+          <div class="sider-bank-select">
+            <n-select v-model:value="currentBank" :options="bankOptions" placeholder="切换题库" @update:value="handleBankChange" size="small" @update:show="(show) => isDropdownOpen = show" />
+          </div>
+          <div class="sider-scroll-area">
+            <n-spin :show="loadingTree">
+              <n-tree block-line v-model:expanded-keys="expandedKeys" :data="treeData" remote :on-load="handleLoad" :render-label="renderTreeLabel" @update:selected-keys="handleNodeClick" />
+            </n-spin>
+            <div v-if="treeData.length === 0 && !loadingTree" class="empty-tree-hint">请先选择题库</div>
+          </div>
         </div>
       </n-layout-sider>
 
       <n-layout has-sider sider-placement="right" class="content-layout">
-        <n-layout-content content-style="padding: 24px; background-color: #f8fafc;" :native-scrollbar="true" id="question-scroll-container">
+        <n-layout-content :content-style="{ padding: isMobile ? '12px' : '24px', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column' }" id="question-scroll-container">
           
           <n-page-header v-if="isSearching" style="margin-bottom: 20px;">
-            <template #title>🔍 搜索结果: "{{ searchKeyword }}"</template>
-            <template #extra><n-button size="small" @click="clearSearch">清除</n-button></template>
+            <template #title>🔍 搜索: "{{ searchKeyword }}"</template>
+            <template #extra><n-button size="small" @click="resetState(); fetchTreeRoot()">退出</n-button></template>
           </n-page-header>
-          
-          <n-page-header v-else-if="currentCategory" style="margin-bottom: 20px;">
+
+          <n-page-header v-else-if="currentCategory" :style="{ marginBottom: isMobile ? '12px' : '20px' }">
             <template #title>
-              <span style="font-size: 14px; color: #666;">{{ currentBank }} / </span> {{ currentCategory }}
+              <div class="category-header-title">
+                <span class="bank-prefix">{{ currentBank }} /</span> <span>{{ currentCategory }}</span>
+              </div>
             </template>
+            
+            <template #subtitle v-if="chapterSummary && !isMobile">
+               <div class="scientific-stats">
+                  <div class="stat-item">
+                    <span class="label">掌握度</span>
+                    <span class="value mastery">{{ chapterSummary.mastery_rate }}%</span>
+                  </div>
+                  <div class="stat-divider"></div>
+                  <div class="stat-item">
+                    <span class="label">正确率</span>
+                    <span class="value" :class="Number(chapterSummary.accuracy_rate) < 60 ? 'accuracy-low' : 'accuracy-high'">
+                       {{ chapterSummary.accuracy_rate }}%
+                    </span>
+                  </div>
+               </div>
+            </template>
+
             <template #extra>
-              <n-space>
+              <div style="display: flex; gap: 8px; align-items: center;">
                 <n-popconfirm @positive-click="handleResetChapter">
-                  <template #trigger><n-button size="small" type="warning" ghost>重做本章</n-button></template>
-                  确定清空记录吗？
+                  <template #trigger><n-button size="small" type="error" dashed><template #icon><n-icon><RefreshOutline /></n-icon></template>重做</n-button></template>
+                  确定要清空本章答题记录吗？
                 </n-popconfirm>
-                <n-tag type="primary" size="small" round>共 {{ pagination.itemCount }} 大题</n-tag>
-              </n-space>
+              </div>
             </template>
           </n-page-header>
-          
-          <n-empty v-else-if="!isSearching" description="请选择左侧章节开始刷题" style="margin-top: 100px">
-              <template #icon><n-icon size="40" color="#ddd"><LibraryOutline /></n-icon></template>
-          </n-empty>
-          
-          <div v-if="visibleQuestions.length > 0" class="question-list">
-              <QuestionCard v-for="q in visibleQuestions" :key="q.id" :question="q" :serial-number="q.displayIndex" @answer-result="onAnswerResult" />
+
+          <n-empty v-if="!currentCategory && !isSearching" description="请选择章节开始刷题" style="margin-top: 100px"><template #icon><n-icon size="40" color="#ddd"><LibraryOutline /></n-icon></template></n-empty>
+
+          <div v-if="skeletonList.length > 0" class="single-question-view">
+            <div v-if="loadingSkeleton" style="padding: 50px 0; text-align: center;"><n-spin size="large" /></div>
+            <div v-else class="question-wrap" :class="{ 'loading-mask': loadingDetail }">
+              <div v-if="isMobile && chapterSummary" class="mobile-summary-bar">
+                 <span>🎯 掌握: {{ chapterSummary.mastery_rate }}%</span>
+                 <span>✅ 正确: {{ chapterSummary.accuracy_rate }}%</span>
+              </div>
+              <QuestionCard v-if="currentDetail" :question="currentDetail" :serial-number="currentDetail.displayIndex" @answer-result="onAnswerResult" />
+            </div>
+            <div class="action-bar" v-if="!loadingSkeleton">
+              <n-button size="large" secondary @click="goPrev" :disabled="currentIndex === 0 || loadingDetail">
+                <template #icon><n-icon><ChevronBackOutline/></n-icon></template>
+                上一题
+              </n-button>
+
+              <div class="progress-indicator">
+                <strong>{{ currentIndex + 1 }}</strong> 
+                <span style="margin: 0 4px; opacity: 0.3;">/</span> 
+                {{ skeletonList.length }}
+              </div>
+
+              <n-button 
+                size="large" 
+                type="primary" 
+                @click="goNext" 
+                icon-placement="right"
+                :disabled="currentIndex === skeletonList.length - 1 || loadingDetail"
+              >
+                <template #icon><n-icon><ChevronForwardOutline/></n-icon></template>
+                下一题
+              </n-button>
+            </div>
           </div>
-          
-          <n-empty v-else-if="!loadingQuestions && isSearching" description="无结果" style="margin-top: 50px"></n-empty>
-          
-          <div ref="loadTrigger" class="load-trigger" v-if="currentCategory || isSearching">
-            <div v-if="loadingQuestions"><n-spin size="small" /> 加载中...</div>
-            <div v-else-if="!hasMore && visibleQuestions.length > 0">🎉 到底啦</div>
-          </div>
-          
-          <n-back-top :right="300" :bottom="50" />
         </n-layout-content>
 
         <n-layout-sider 
-          v-if="globalSheetItems.length > 0" 
-          bordered 
-          collapse-mode="width" 
-          :collapsed-width="0" 
-          :width="260" 
-          show-trigger="arrow-circle" 
-          content-style="padding: 0; background-color: #fff;"
+          v-if="!isMobile && skeletonList.length > 0" bordered collapse-mode="width" :collapsed-width="36" :width="260" :collapsed="rightCollapsed"
+          @mouseenter="handleRightEnter" @mouseleave="handleRightLeave" content-style="padding: 0; background-color: #fff; display: flex; flex-direction: column;" class="sheet-sider auto-expand-sider"
         >
-          <div class="sheet-header"><div class="sheet-title">📝 答题卡 ({{ globalSheetItems.length }})</div></div>
-          <div class="sheet-content">
-            <div class="sheet-flow">
-              <template v-for="item in answerSheetItems" :key="item.key">
-                <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
-                
-                <div v-else 
-                      class="number-circle" 
-                      :class="{ 'sheet-correct': item.status === 'correct', 'sheet-wrong': item.status === 'wrong', 'sheet-partial': item.status === 'partially-correct' }" 
-                      @click="handleSheetJump(item.raw)">
-                      {{ item.globalIndex }}
-                </div>
-              </template>
+          <div class="collapsed-strip" v-show="rightCollapsed"><n-icon size="20" color="#999"><ListOutline /></n-icon></div>
+          <div class="expanded-content" v-show="!rightCollapsed">
+            <div class="sheet-header">
+              <div class="sheet-title">答题卡 ({{ skeletonList.length }})</div>
+              <n-button text size="small" @click="toggleRightPin" :type="rightPinned ? 'primary' : 'default'"><template #icon><n-icon size="18"><component :is="rightPinned ? Push : PushOutline" /></n-icon></template></n-button>
+            </div>
+            <div class="sheet-search"><n-input v-model:value="searchKeyword" placeholder="搜索题目..." size="small" round @keydown.enter="handleSearch" clearable><template #prefix><n-icon :component="SearchOutline" /></template></n-input></div>
+            <div class="sheet-content">
+              <div class="sheet-flow">
+                <template v-for="item in answerSheetItems" :key="item.key">
+                  <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
+                  <div v-else class="number-circle" :class="{'sheet-correct': item.status==='correct', 'sheet-wrong': item.status==='wrong', 'active-q': item.skeletonIndex===currentIndex}" @click="handlePageJump(item.skeletonIndex)">{{ item.globalIndex }}</div>
+                </template>
+              </div>
             </div>
           </div>
         </n-layout-sider>
       </n-layout>
     </n-layout>
+
+    <div v-if="isMobile" class="mobile-fabs">
+      <div class="fab-btn left-fab" @click="mobileLeftOpen = true"><n-icon size="24" color="#fff"><MenuOutline /></n-icon></div>
+      <div class="fab-btn right-fab" @click="mobileRightOpen = true" v-if="skeletonList.length > 0"><n-icon size="24" color="#fff"><ListOutline /></n-icon></div>
+    </div>
+
+    <n-drawer v-model:show="mobileLeftOpen" width="100%" placement="left">
+      <n-drawer-content title="章节目录" closable>
+        <div class="mobile-drawer-inner">
+          <n-select v-model:value="currentBank" :options="bankOptions" @update:value="handleBankChange" style="margin-bottom: 20px;" placeholder="选择题库"/>
+          <n-spin :show="loadingTree">
+            <n-tree block-line :data="treeData" remote :on-load="handleLoad" :render-label="renderTreeLabel" @update:selected-keys="handleNodeClick" />
+          </n-spin>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
+
+    <n-drawer v-model:show="mobileRightOpen" width="100%" placement="right">
+      <n-drawer-content :title="`答题卡 (${skeletonList.length})`" closable>
+        <div class="mobile-drawer-inner">
+          <n-input v-model:value="searchKeyword" placeholder="搜索本章题目..." round @keydown.enter="handleSearch" clearable style="margin-bottom: 24px;">
+            <template #prefix><n-icon :component="SearchOutline"/></template>
+          </n-input>
+          <div class="sheet-flow mobile-sheet-flow">
+            <template v-for="item in answerSheetItems" :key="item.key">
+              <div v-if="item.isHeader" class="type-header"><span class="type-dot"></span>{{ item.type }}</div>
+              <div v-else class="number-circle mobile-circle" :class="{'sheet-correct': item.status==='correct', 'sheet-wrong': item.status==='wrong', 'active-q': item.skeletonIndex===currentIndex}" @click="handlePageJump(item.skeletonIndex)">{{ item.globalIndex }}</div>
+            </template>
+          </div>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
 <style scoped>
-.quiz-container {
-  height: 100%;
+/* 容器与基础布局 */
+.quiz-container { height: 100%; display: flex; flex-direction: column; background-color: transparent; }
+.main-layout-area { flex: 1; overflow: hidden; background-color: #fff; }
+.auto-expand-sider { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 50; }
+.collapsed-strip { height: 100%; width: 100%; display: flex; justify-content: center; padding-top: 24px; cursor: pointer; }
+.expanded-content { height: 100%; display: flex; flex-direction: column; background-color: #fff; }
+.sider-toolbar { padding: 20px 20px 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+.toolbar-title { font-weight: 800; font-size: 16px; color: #1e293b; }
+.sider-bank-select { padding: 0 16px 12px 16px; border-bottom: 1px solid #eee; }
+.sider-scroll-area { flex: 1; overflow-y: auto; padding: 12px; }
+
+/* 目录树优化 */
+:deep(.n-tree-node) { padding: 4px 0; border-radius: 6px; margin-bottom: 2px; }
+:deep(.n-tree-node-content) { align-items: center; }
+:deep(.n-tree-node-indent) { width: 14px !important; }
+
+/* 🔥 科学统计看板样式 */
+.scientific-stats {
   display: flex;
-  flex-direction: column;
-  background-color: #fff;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  align-items: center;
+  background: #f1f5f9;
+  padding: 4px 16px;
+  border-radius: 100px;
+  margin-left: 16px;
   border: 1px solid #e2e8f0;
 }
+.stat-item { display: flex; align-items: center; gap: 8px; }
+.stat-item .label { font-size: 12px; color: #64748b; font-weight: 500; }
+.stat-item .value { font-size: 14px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+.stat-divider { width: 1px; height: 14px; background: #cbd5e1; margin: 0 12px; }
+.mastery { color: #3b82f6; }
+.accuracy-high { color: #10b981; }
+.accuracy-low { color: #f59e0b; }
 
-.page-control-bar {
-  display: flex;
+/* QuizBank.vue 的 style 部分 */
+.action-bar {
+  margin-top: 32px;
+  padding: 12px 24px;
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid #f1f5f9;
+  
+  /* 🔥 核心修复逻辑 */
+  display: flex !important;
+  flex-direction: row !important; /* 强制横向 */
+  align-items: center !important;  /* 强制垂直居中 */
   justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  background-color: #fff;
-  border-bottom: 2px solid #f0f0f0;
+  
+  box-shadow: 0 10px 25px -5px rgba(0,0,0,0.04);
 }
 
-.left-controls {
+/* 确保中间的进度文字也是居中的 */
+.progress-indicator {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 4px;
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 600;
+  line-height: 1; /* 统一行高防止偏移 */
 }
 
-.page-title {
-  font-size: 18px;
+.progress-indicator strong {
+  font-size: 20px;
+  color: #0f172a;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+}
+
+/* 手机端统计栏 */
+.mobile-summary-bar {
+  display: flex;
+  justify-content: space-around;
+  background: #fff;
+  padding: 10px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
   font-weight: 700;
-  color: #1e293b;
-  margin: 0;
-  display: flex;
-  align-items: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  color: #334155;
 }
 
-.bank-selector {
-  width: 180px;
+/* 答题卡样式 */
+.sheet-header { padding: 16px 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.sheet-content { padding: 20px; flex: 1; overflow-y: auto; }
+.sheet-flow { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.number-circle { 
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid #f1f5f9; 
+  font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; 
+  cursor: pointer; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
+  background-color: #fff; color: #64748b; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.number-circle:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+
+.active-q { 
+  border-color: #3b82f6 !important; color: #3b82f6 !important; 
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+  z-index: 2;
 }
 
-.search-box {
-  width: 300px;
-}
+.sheet-correct { background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: #fff !important; border: none !important; }
+.sheet-wrong { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important; color: #fff !important; border: none !important; }
 
-.main-layout-area {
-  flex: 1;
-  overflow: hidden;
-}
+/* 手机端专用 */
+.mobile-fabs { position: fixed; bottom: 80px; left: 20px; right: 20px; height: 0; display: flex; justify-content: space-between; z-index: 1000; pointer-events: none; }
+.fab-btn { width: 48px; height: 48px; border-radius: 50%; background: #3b82f6; display: flex; align-items: center; justify-content: center; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+.mobile-drawer-inner { padding: 8px 4px 40px 4px; }
+.mobile-sheet-flow { gap: 12px; }
+.mobile-circle { width: 44px; height: 44px; font-size: 16px; }
 
-/* Question List & Sheet Styles */
-.question-list { display: flex; flex-direction: column; padding-bottom: 20px; }
-.sheet-header { padding: 16px; border-bottom: 1px solid #f0f0f0; background-color: #fff; position: sticky; top: 0; z-index: 10; font-weight: bold; text-align: center; }
-.sheet-content { padding: 16px; }
-.sheet-flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.type-header { width: 100%; font-size: 12px; font-weight: bold; color: #999; margin-top: 10px; margin-bottom: 4px; display: flex; align-items: center; }
-.type-dot { width: 6px; height: 6px; background-color: #18a058; border-radius: 50%; margin-right: 6px; }
-.number-circle { width: 34px; height: 34px; border-radius: 8px; background-color: #f5f7fa; color: #666; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; user-select: none; }
-.number-circle:hover { background-color: #e0e0e0; transform: translateY(-2px); }
-.sheet-correct { background-color: #18a058 !important; color: #fff !important; }
-.sheet-wrong { background-color: #d03050 !important; color: #fff !important; }
-.sheet-partial { background-color: #f0a020 !important; color: #fff !important; }
-.load-trigger { padding: 20px; text-align: center; color: #999; }
-
-:deep(.highlight-flash) {
-    animation: flash-bg 1.5s ease-out;
-}
-
-@keyframes flash-bg {
-    0% { background-color: rgba(24, 160, 88, 0.2); }
-    100% { background-color: transparent; }
-}
-
-/* Transition for layout toggle */
-.content-layout {
-  transition: all 0.3s ease;
-}
+.type-header { width: 100%; font-size: 13px; font-weight: 700; color: #94a3b8; margin-top: 20px; margin-bottom: 12px; display: flex; align-items: center; }
+.type-dot { width: 6px; height: 6px; background-color: #e2e8f0; border-radius: 50%; margin-right: 8px; }
 </style>

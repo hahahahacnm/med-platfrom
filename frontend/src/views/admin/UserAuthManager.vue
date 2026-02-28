@@ -8,7 +8,7 @@ import {
 import { 
   SearchOutline, WalletOutline, TimeOutline, GiftOutline, InfiniteOutline
 } from '@vicons/ionicons5'
-import request from '../../utils/request' // 确保路径正确
+import request from '../../utils/request' 
 import { format, differenceInDays } from 'date-fns'
 
 const message = useMessage()
@@ -18,7 +18,7 @@ const pagination = reactive({ page: 1, pageSize: 10, itemCount: 0 })
 const keyword = ref('')
 
 // ==========================================
-// 🛠️ 工具函数：日期友好化显示 (视觉欺骗)
+// 🛠️ 工具函数
 // ==========================================
 const isPermanent = (dateStr: string) => {
     if (!dateStr) return false
@@ -28,7 +28,6 @@ const isPermanent = (dateStr: string) => {
 const formatFriendlyDate = (dateStr: string) => {
     if (!dateStr) return '未知'
     const date = new Date(dateStr)
-    // 🔥 核心逻辑：超过 2090 年视为永久
     if (date.getFullYear() > 2090) {
         return '永久有效'
     }
@@ -53,12 +52,10 @@ const columns = [
 
        // 情况B：有资产 -> 悬浮气泡查看详情
        return h(NPopover, { trigger: 'hover', style: { maxWidth: '350px' } }, {
-           // 1. 触发器 (Trigger)
            trigger: () => h(NTag, 
                { type: 'success', bordered: false, style: 'cursor: pointer' }, 
                { default: () => `已授权 ${products.length} 项权益` }
            ),
-           // 2. 悬浮内容 (Content)
            default: () => {
                return h(NList, { size: 'small', bordered: false }, {
                    default: () => products.map((up: any) => {
@@ -66,12 +63,11 @@ const columns = [
                        const daysLeft = differenceInDays(expireDate, new Date())
                        const isPerm = isPermanent(up.expire_at)
                        
-                       // 动态计算标签
                        let tagType = 'success'
                        let tagText = `剩 ${daysLeft} 天`
                        
                        if (isPerm) {
-                           tagType = 'info' // 永久用蓝色/信息色
+                           tagType = 'info' 
                            tagText = '永久'
                        } else if (daysLeft < 0) {
                            tagType = 'error'
@@ -113,9 +109,14 @@ const fetchData = async () => {
   loading.value = true
   try {
     const res: any = await request.get('/admin/users', {
-      params: { page: pagination.page, page_size: pagination.pageSize, keyword: keyword.value }
+      params: { 
+        page: pagination.page, 
+        page_size: pagination.pageSize, 
+        keyword: keyword.value,
+        // 🔥🔥🔥 核心修改：只查询普通用户，过滤掉 admin 和 agent 🔥🔥🔥
+        role: 'user' 
+      }
     })
-    // 确保后端返回结构匹配，有时可能是 res.data.list
     list.value = res.data || []
     pagination.itemCount = res.total || 0
   } catch { message.error('加载失败') } finally { loading.value = false }
@@ -128,7 +129,6 @@ const showAuthModal = ref(false)
 const currentCustomer = ref<any>({})
 const userProducts = ref<any[]>([])
 const allProducts = ref<any[]>([])
-// 默认时长改为 -1 (永久) 或者 365
 const grantForm = reactive({ productId: null, days: 365 })
 const granting = ref(false)
 
@@ -136,7 +136,7 @@ const openAuthModal = (user: any) => {
     currentCustomer.value = user
     showAuthModal.value = true
     grantForm.productId = null
-    fetchUserProducts(user.id) // 注意后端返回是 id 还是 ID
+    fetchUserProducts(user.id) 
     fetchAllProducts()
 }
 
@@ -151,7 +151,6 @@ const fetchUserProducts = async (uid: number) => {
 const fetchAllProducts = async () => {
     try {
         const res: any = await request.get('/admin/products')
-        // 筛选出已上架的商品 (is_on_shelf) 供选择
         const validProducts = (res.data || []).filter((p:any) => p.is_on_shelf)
         allProducts.value = validProducts.map((p:any) => ({ label: p.name, value: p.ID }))
     } catch {}
@@ -167,9 +166,7 @@ const handleGrant = async () => {
             duration_days: grantForm.days
         })
         message.success('发放成功')
-        // 刷新内部列表
         await fetchUserProducts(currentCustomer.value.id) 
-        // 刷新外部大列表 (更新概览标签)
         await fetchData()
     } catch { 
         message.error('发放失败') 

@@ -1,65 +1,138 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, shallowRef, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { 
-  NCard, NIcon, NSkeleton, NAvatar, NTag, NTooltip, NCollapse, NCollapseItem, NEmpty,
-  NNumberAnimation, NButton, NModal, NSpin
+  NCard, NIcon, NSkeleton, NAvatar, NTooltip, NEmpty,
+  NNumberAnimation, NButton, NModal, NSpin, useMessage, NTag, NGradientText,
+  useNotification 
 } from 'naive-ui'
 import { 
   ArrowForwardOutline, BookOutline, StarOutline, JournalOutline,
-  Flame, BarChartOutline, TrophyOutline, SchoolOutline, 
-  TimeOutline, CheckmarkCircleOutline, TrendingUpOutline, RibbonOutline
+  Flame, BarChartOutline, TrophyOutline, 
+  NotificationsOutline, CheckmarkDoneOutline, SparklesOutline, CalendarOutline,
+  ChevronForwardOutline
 } from '@vicons/ionicons5'
 import request from '../utils/request'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
 const router = useRouter()
+const message = useMessage()
+const notification = useNotification()
+
 const loading = ref(true)
 
-// Dashboard 数据
+// 核心数据模型
 const stats = ref({ 
-    total_count: 0, 
-    today_count: 0, 
-    accuracy: 0,
-    consecutive_days: 0,
-    activity_map: [] as any[],
-    subject_analysis: [] as any[], 
-    rank_list: [] as any[]
+    total_count: 0, today_count: 0, accuracy: 0,
+    consecutive_days: 0, activity_map: [] as any[], rank_list: [] as any[]
 })
 
-// ===========================
-// 1. Dashboard 数据获取
-// ===========================
-const fetchStats = async () => {
-  loading.value = true
-  try {
-    const res: any = await request.get('/stats') 
-    if (res.data) {
-        stats.value = { 
-            ...stats.value, 
-            ...res.data,
-            activity_map: res.data.activity_map || [],
-            subject_analysis: res.data.subject_analysis || [],
-            rank_list: res.data.rank_list || []
-        }
-    }
-  } catch (e) { 
-    console.error("Dashboard Stats Fetch Error:", e) 
-  } finally { 
-    loading.value = false 
-  }
-}
+const notifications = ref<any[]>([])
+const unreadCount = ref(0)
+const notifLoading = ref(false)
 
-// ===========================
-// 2. 完整排行榜逻辑 (弹窗)
-// ===========================
+// 排行榜弹窗逻辑
 const showRankModal = ref(false)
 const rankListFull = ref<any[]>([])
 const rankLoading = ref(false)
 const rankPage = ref(1)
 const rankHasMore = ref(true)
 
+// WebSocket 实例
+let ws: WebSocket | null = null
+
+const fetchStats = async () => {
+  loading.value = true
+  try {
+    const res: any = await request.get('/stats') 
+    if (res.data) stats.value = { ...res.data }
+  } catch (e) { console.error(e) } finally { loading.value = false }
+}
+
+const fetchNotifications = async () => {
+    notifLoading.value = true
+    try {
+        const res: any = await request.get('/notifications')
+        notifications.value = res.data || []
+        unreadCount.value = res.unread_count || 0
+    } catch (e) { console.error(e) } finally { notifLoading.value = false }
+}
+
+// 🔥 全部标记为已读 (已修复路径，移除 /forum)
+const handleReadAll = async () => {
+    if (unreadCount.value === 0) return
+    try {
+        await request.put('/notifications/read-all')
+        // 前端状态同步
+        notifications.value.forEach(n => n.is_read = true)
+        unreadCount.value = 0
+        message.success('所有消息已标记为已读')
+    } catch (e) { message.error('操作失败') }
+}
+
+// 🔥 单条消息点击事件 (已修复路径，状态即时同步)
+const handleNotifClick = async (item: any) => {
+    const targetPath = item.source_type === 'forum' ? `/post/${item.source_id}` : '/quiz'
+    
+    // 如果已读，直接跳转即可
+    if (item.is_read) {
+        router.push(targetPath)
+        return
+    }
+
+    try {
+        // 调用后端已读接口
+        await request.put(`/notifications/${item.id}/read`)
+        
+        // 状态即时闭环，让红点和数字立刻消失
+        item.is_read = true 
+        if (unreadCount.value > 0) unreadCount.value--
+        
+        router.push(targetPath)
+    } catch (error) {
+        // 即使接口调用失败，为了防止死锁，也允许用户跳转
+        router.push(targetPath)
+    }
+}
+
+// WebSocket 实时通知接收逻辑
+const initWebSocket = () => {
+    const uid = userStore.id 
+    if (!uid) return
+    const wsUrl = `ws://localhost:8080/ws?uid=${uid}`
+    ws = new WebSocket(wsUrl)
+    
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'new_notification') {
+                const data = msg.data
+                
+                // 右上角系统通知弹窗
+                notification.info({
+                    title: `💬 新动态: ${data.title}`,
+                    content: data.content,
+                    duration: 5000
+                })
+                
+                // 推入本地通知列表顶部
+                const newNotif = { 
+                    ...data, 
+                    is_read: false, 
+                    sender: data.sender || { avatar: null, nickname: '系统' } 
+                }
+                notifications.value.unshift(newNotif)
+                if (notifications.value.length > 15) notifications.value.pop() 
+                unreadCount.value++
+            }
+        } catch (e) {}
+    }
+    
+    ws.onclose = () => setTimeout(initWebSocket, 5000)
+}
+
+// 排行榜相关逻辑
 const openRankModal = () => {
     showRankModal.value = true
     rankPage.value = 1
@@ -72,633 +145,344 @@ const fetchFullRank = async () => {
     if (rankLoading.value || !rankHasMore.value) return
     rankLoading.value = true
     try {
-        const res: any = await request.get('/rank/daily', {
-            params: { page: rankPage.value, page_size: 20 }
-        })
+        const res: any = await request.get('/rank/daily', { params: { page: rankPage.value, page_size: 20 } })
         if (res.data) {
-            if (rankPage.value === 1) {
-                rankListFull.value = res.data
-            } else {
-                rankListFull.value = [...rankListFull.value, ...res.data]
-            }
+            rankListFull.value = rankPage.value === 1 ? res.data : [...rankListFull.value, ...res.data]
             rankHasMore.value = res.has_more
             if (rankHasMore.value) rankPage.value++
         }
-    } catch (e) {
-        console.error(e)
-    } finally {
-        rankLoading.value = false
-    }
+    } catch (e) { console.error(e) } finally { rankLoading.value = false }
 }
 
 const handleRankScroll = (e: Event) => {
     const target = e.target as HTMLElement
-    if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) {
-        fetchFullRank()
-    }
+    if (target.scrollHeight - target.scrollTop - target.clientHeight < 50) fetchFullRank()
 }
 
-// ===========================
-// 3. 通用辅助 & 头像处理
-// ===========================
-const greeting = computed(() => {
-  const hour = new Date().getHours()
-  if (hour < 5) return '夜深了'
-  if (hour < 9) return '早安'
-  if (hour < 12) return '上午好'
-  if (hour < 14) return '午安'
-  if (hour < 18) return '下午好'
-  return '晚上好'
-})
-
-// 头像处理：直接读取 userStore，如果没有就undefined(触发fallback)
-const getAvatar = (path: string) => {
+const getAvatar = (path: string | undefined) => {
     if (!path) return undefined
     return path.startsWith('http') ? path : `http://localhost:8080${path}`
 }
 
 onMounted(() => { 
-    // 🔥🔥🔥 这里的代码现在非常干净 🔥🔥🔥
-    // 我们不再需要在这里请求 /user/profile 了
-    // 因为 user.ts 已经保证了登录后头像就在 Store 里
-    fetchStats(); 
+    fetchStats()
+    fetchNotifications()
+    initWebSocket()
 })
+
+onUnmounted(() => { if (ws) ws.close() })
 </script>
 
 <template>
-  <div class="dashboard-container">
-    <div class="welcome-banner animate-enter" style="animation-delay: 0.1s;">
-        <div class="banner-glass">
-            <div class="user-welcome">
-                <div class="avatar-ring">
-                      <n-avatar 
-                        round 
-                        :size="72" 
-                        :src="getAvatar(userStore.avatar)" 
-                        fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg"
-                        class="user-avatar"
-                      />
-                      <div class="status-badge"></div>
-                </div>
-                <div class="text-content">
-                    <h2 class="greet-title">{{ greeting }}，{{ userStore.nickname || userStore.username }}</h2>
-                    <p class="greet-sub">
-                        <n-icon class="icon-flame"><Flame /></n-icon> 
-                        已连续专注学习 <span class="highlight">{{ stats.consecutive_days }}</span> 天
-                    </p>
+  <div class="db-container">
+    <div class="welcome-hero animate-in">
+        <div class="hero-left">
+            <div class="avatar-ring">
+                <n-avatar round :size="84" :src="getAvatar(userStore.avatar)" fallback-src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png" />
+            </div>
+            <div class="welcome-text">
+                <h1 class="welcome-title">早安，{{ userStore.nickname || userStore.username }}</h1>
+                <p class="welcome-subtitle">今天也要保持专注，离梦想更近一步。</p>
+                <div class="badge-row">
+                    <div class="stat-pill">
+                        <n-icon color="#f59e0b"><Flame /></n-icon>
+                        <span>专注打卡 <b>{{ stats.consecutive_days }}</b> 天</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="header-stats">
-                 <div class="stat-item">
-                    <div class="stat-icon-wrapper blue-grad">
-                        <n-icon><TimeOutline /></n-icon>
-                    </div>
-                    <div class="stat-meta">
-                        <div class="label">今日刷题</div>
-                        <div class="value"><n-number-animation :from="0" :to="stats.today_count" /></div>
-                    </div>
-                 </div>
-                 <div class="stat-divider"></div>
-                 <div class="stat-item">
-                    <div class="stat-icon-wrapper blue-grad">
-                        <n-icon><CheckmarkCircleOutline /></n-icon>
-                    </div>
-                    <div class="stat-meta">
-                        <div class="label">正确率</div>
-                        <div class="value">
-                           {{ stats.accuracy.toFixed(0) }}<span class="unit">%</span>
-                        </div>
-                    </div>
-                 </div>
-                 <div class="stat-divider"></div>
-                 <div class="stat-item">
-                      <div class="stat-icon-wrapper blue-grad">
-                         <n-icon><TrendingUpOutline /></n-icon>
-                      </div>
-                      <div class="stat-meta">
-                          <div class="label">累计做题</div>
-                          <div class="value"><n-number-animation :from="0" :to="stats.total_count" /></div>
-                      </div>
-                 </div>
-            </div>
+        </div>
+        
+        <div class="hero-stats">
+             <div class="hero-stat-item">
+                <span class="label">今日进度</span>
+                <span class="value"><n-number-animation :to="stats.today_count" /> <small>题</small></span>
+             </div>
+             <div class="stat-v-line"></div>
+             <div class="hero-stat-item">
+                <span class="label">当前正确率</span>
+                <span class="value">{{ stats.accuracy.toFixed(0) }}<small>%</small></span>
+             </div>
         </div>
     </div>
 
-    <div class="main-grid">
-      
-      <div class="main-column">
-          
-          <div class="section-actions animate-enter" style="animation-delay: 0.2s;">
-              <div class="grid-actions">
-                  <div class="action-card" @click="router.push('/quiz')">
-                      <div class="ac-content">
-                          <div class="ac-icon bg-blue-1"><n-icon><ArrowForwardOutline/></n-icon></div>
-                          <div class="ac-info">
-                              <h3>开始刷题</h3>
-                              <p>自由选择章节练习</p>
-                          </div>
-                      </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
-                  </div>
-                  
-                  <div class="action-card" @click="router.push('/mistakes')">
-                       <div class="ac-content">
-                          <div class="ac-icon bg-blue-2"><n-icon><BookOutline/></n-icon></div>
-                          <div class="ac-info">
-                              <h3>消灭错题</h3>
-                              <p>精准复习薄弱点</p>
-                          </div>
-                      </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
-                  </div>
-
-                  <div class="action-card" @click="router.push('/favorites')">
-                       <div class="ac-content">
-                          <div class="ac-icon bg-blue-3"><n-icon><StarOutline/></n-icon></div>
-                          <div class="ac-info">
-                              <h3>我的收藏</h3>
-                              <p>重难点考题回顾</p>
-                          </div>
-                      </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
-                  </div>
-
-                  <div class="action-card" @click="router.push('/notes')">
-                       <div class="ac-content">
-                          <div class="ac-icon bg-blue-4"><n-icon><JournalOutline/></n-icon></div>
-                          <div class="ac-info">
-                              <h3>复习笔记</h3>
-                              <p>沉淀个人知识库</p>
-                          </div>
-                      </div>
-                      <div class="ac-bg-shape bg-soft-blue"></div>
-                  </div>
-              </div>
-          </div>
-
-          <div class="chart-section animate-enter" style="animation-delay: 0.3s;">
-             <n-card :bordered="false" class="panel-card" content-style="padding: 24px;">
-                  <template #header>
-                      <div class="card-header">
-                          <div class="title-with-icon">
-                              <div class="icon-box themed-box"><n-icon><BarChartOutline /></n-icon></div>
-                              <span>学习热力图</span>
-                          </div>
-                      </div>
-                  </template>
-                  <div v-if="loading"><n-skeleton text :repeat="2" /></div>
-                  <div v-else-if="stats.activity_map.length > 0" class="heatmap-container">
-                      <div class="heatmap-scroll">
-                          <n-tooltip trigger="hover" v-for="(day, index) in stats.activity_map" :key="index" placement="top">
-                              <template #trigger>
-                                  <div class="heat-col">
-                                      <div class="heat-track">
-                                          <div class="heat-fill" 
-                                               :class="`level-${day.level}`" 
-                                               :style="{height: (day.level * 20 + 15) + '%'}">
-                                          </div>
-                                      </div>
-                                      <span class="heat-label">{{ day.date.split('-')[2] }}</span>
-                                  </div>
-                              </template>
-                              <div class="heat-tooltip">
-                                  <div class="tooltip-date">{{ day.date }}</div>
-                                  <div class="tooltip-val">完成 <b>{{ day.count }}</b> 题</div>
-                              </div>
-                          </n-tooltip>
-                      </div>
-                  </div>
-                  <n-empty v-else description="暂无记录，快去刷题点亮热力图吧！" />
-              </n-card>
-          </div>
-
-          <div class="analysis-section animate-enter" style="animation-delay: 0.4s;">
-              <n-card :bordered="false" class="panel-card" content-style="padding: 0;">
-                   <template #header>
-                      <div class="card-header">
-                          <div class="title-with-icon">
-                              <div class="icon-box themed-box"><n-icon><SchoolOutline /></n-icon></div>
-                              <span>学科能力分布</span>
-                          </div>
-                          <n-tag size="small" round :bordered="false" type="primary" class="tag-label">知识点透视</n-tag>
-                      </div>
-                  </template>
-                  
-                  <div v-if="loading" style="padding: 20px;"><n-skeleton text :repeat="5" /></div>
-                  <div v-else-if="stats.subject_analysis.length > 0">
-                      <n-collapse display-directive="show" arrow-placement="right" class="custom-collapse">
-                          <n-collapse-item v-for="sub in stats.subject_analysis" :key="sub.name" :name="sub.name">
-                              <template #header>
-                                  <div class="collapse-trigger">
-                                      <span class="trigger-title">{{ sub.name }}</span>
-                                      <div class="trigger-meta">
-                                          <span class="count-badge">{{ sub.total }}题</span>
-                                          <div class="mini-progress">
-                                            <div class="mp-bar" :style="{width: sub.accuracy+'%', background: sub.accuracy > 60 ? '#18a058' : '#d03050'}"></div>
-                                          </div>
-                                          <span class="acc-val">{{ sub.accuracy.toFixed(0) }}%</span>
-                                      </div>
-                                  </div>
-                              </template>
-                              
-                              <div class="sub-detail-grid">
-                                  <div v-for="chap in sub.chapters" :key="chap.name" class="chapter-tile">
-                                      <div class="tile-head">
-                                          <span class="chap-t" :title="chap.name">{{ chap.name }}</span>
-                                          <span class="chap-p">{{ chap.accuracy.toFixed(0) }}%</span>
-                                      </div>
-                                      <n-progress 
-                                        type="line" 
-                                        :percentage="Number(chap.accuracy.toFixed(1))" 
-                                        :color="chap.accuracy > 80 ? '#18a058' : (chap.accuracy > 60 ? '#2080f0' : '#d03050')"
-                                        :height="6"
-                                        :border-radius="3"
-                                        :show-indicator="false"
-                                        rail-color="#f1f5f9"
-                                      />
-                                      <div class="tile-foot">{{ chap.total }} 道题目</div>
-                                  </div>
-                              </div>
-                          </n-collapse-item>
-                      </n-collapse>
-                  </div>
-                  <n-empty v-else description="暂无数据" style="padding: 40px;">
-                    <template #icon><n-icon color="#cbd5e1" size="40"><SchoolOutline /></n-icon></template>
-                  </n-empty>
-              </n-card>
-          </div>
-      </div>
-
-      <div class="side-column animate-enter" style="animation-delay: 0.5s;">
-          <n-card :bordered="false" class="panel-card rank-panel" content-style="padding: 0;">
-              <template #header>
-                  <div class="card-header center-y">
-                       <div class="title-with-icon">
-                          <div class="icon-box themed-box"><n-icon><TrophyOutline /></n-icon></div>
-                          <span>今日卷王榜</span>
-                       </div>
-                       <n-button text size="tiny" type="primary" @click="openRankModal">全部 ></n-button>
-                  </div>
-              </template>
-              
-              <div v-if="loading" style="padding: 20px;"><n-skeleton text :repeat="5" /></div>
-              <div v-else-if="stats.rank_list.length > 0" class="rank-list">
-                  <div v-for="(user, idx) in stats.rank_list" :key="user.username" class="rank-item">
-                      <div class="rank-pos">
-                           <template v-if="idx === 0">🥇</template>
-                           <template v-else-if="idx === 1">🥈</template>
-                           <template v-else-if="idx === 2">🥉</template>
-                           <span v-else class="rank-num">{{ idx + 1 }}</span>
-                      </div>
-                      
-                      <n-avatar round size="small" :src="getAvatar(user.avatar)" class="rank-avi" fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg" />
-                      
-                      <div class="rank-details">
-                          <div class="rd-name">{{ user.username }}</div>
-                          <div class="rd-score">已刷 {{ user.count }} 题</div>
-                      </div>
-                  </div>
-              </div>
-              <n-empty v-else description="今日虚位以待" style="padding: 20px;" />
-              
-              <div class="rank-footer">
-                  <p>每日凌晨 0:00 更新榜单</p>
-              </div>
-          </n-card>
-          
-          <div class="daily-quote-card">
-              <div class="quote-content">
-                  <div class="quote-icon"><n-icon><RibbonOutline /></n-icon></div>
-                  <p>"医者仁心，术业专攻。"</p>
-              </div>
-          </div>
-      </div>
-
-    </div>
-
-    <n-modal v-model:show="showRankModal" preset="card" title="今日卷王总榜 🏆" style="width: 500px; max-width: 90%;" :bordered="false" size="huge">
-        <div class="full-rank-container" @scroll="handleRankScroll">
-            <div v-for="(user, idx) in rankListFull" :key="user.user_id" class="rank-row animate-in" :style="{animationDelay: idx * 0.05 + 's'}">
-                <div class="rank-idx">
-                   <span v-if="user.rank === 1">🥇</span>
-                   <span v-else-if="user.rank === 2">🥈</span>
-                   <span v-else-if="user.rank === 3">🥉</span>
-                   <span v-else class="num">{{ user.rank }}</span>
+    <div class="dashboard-grid">
+        <div class="main-column">
+            <div class="action-grid animate-in" style="animation-delay: 0.1s">
+                <div class="action-tile t-blue" @click="router.push('/quiz')">
+                    <div class="icon-wrap"><n-icon><ArrowForwardOutline /></n-icon></div>
+                    <div class="tile-content"><h3>科学刷题</h3><p>系统化章节练习</p></div>
+                    <n-icon class="arrow-hint"><ChevronForwardOutline /></n-icon>
                 </div>
-                
-                <div class="rank-info">
-                   <n-avatar round :size="40" :src="getAvatar(user.avatar)" fallback-src="https://07akioni.oss-cn-beijing.aliyuncs.com/07akioni.jpeg" />
-                   <div class="info-text">
-                      <div class="name-row">
-                         <span class="name">{{ user.nickname || user.username }}</span>
-                         <n-tag v-if="user.school" size="tiny" :bordered="false" class="school-tag">
-                            {{ user.school }}
-                         </n-tag>
-                      </div>
-                      <div class="score">今日刷题 <span class="highlight">{{ user.count }}</span></div>
-                   </div>
+                <div class="action-tile t-red" @click="router.push('/mistakes')">
+                    <div class="icon-wrap"><n-icon><BookOutline /></n-icon></div>
+                    <div class="tile-content"><h3>错题清零</h3><p>攻克薄弱环节</p></div>
+                    <n-icon class="arrow-hint"><ChevronForwardOutline /></n-icon>
+                </div>
+                <div class="action-tile t-amber" @click="router.push('/favorites')">
+                    <div class="icon-wrap"><n-icon><StarOutline /></n-icon></div>
+                    <div class="tile-content"><h3>考题收藏</h3><p>核心考点复盘</p></div>
+                    <n-icon class="arrow-hint"><ChevronForwardOutline /></n-icon>
+                </div>
+                <div class="action-tile t-indigo" @click="router.push('/my-notes')">
+                    <div class="icon-wrap"><n-icon><JournalOutline /></n-icon></div>
+                    <div class="tile-content"><h3>复习笔记</h3><p>思维精华沉淀</p></div>
+                    <n-icon class="arrow-hint"><ChevronForwardOutline /></n-icon>
                 </div>
             </div>
 
-            <div class="loading-state">
-               <n-spin v-if="rankLoading" size="small" />
-               <div v-else-if="!rankHasMore && rankListFull.length > 0" class="end-text">--- 到底了，前100名展示完毕 ---</div>
-               <n-empty v-else-if="rankListFull.length === 0" description="今天还没人刷题，快去抢沙发！" />
+            <n-card class="data-card animate-in" style="animation-delay: 0.2s">
+                <template #header>
+                    <div class="card-header-with-icon">
+                        <n-icon color="#2563eb"><CalendarOutline /></n-icon>
+                        <span>学习活力追踪 (14天)</span>
+                    </div>
+                </template>
+                <div class="heatmap-container" v-if="!loading">
+                    <div class="heatmap-flex">
+                        <n-tooltip v-for="(day, i) in stats.activity_map" :key="i" trigger="hover">
+                            <template #trigger>
+                                <div class="heat-col">
+                                    <div class="heat-track">
+                                        <div class="heat-fill" :class="`lvl-${day.level}`" :style="{height: (day.level*20 + 15)+'%'}"></div>
+                                    </div>
+                                    <span class="heat-label">{{ day.date.split('-')[2] }}</span>
+                                </div>
+                            </template>
+                            {{ day.date }}：完成 {{ day.count }} 题
+                        </n-tooltip>
+                    </div>
+                </div>
+                <n-empty v-else description="暂无数据" />
+            </n-card>
+        </div>
+
+        <div class="side-column">
+            <n-card class="data-card side-widget animate-in" style="animation-delay: 0.3s" content-style="padding: 0;">
+                <template #header>
+                    <div class="card-header-with-icon" style="padding: 16px 20px 0 20px">
+                        <n-icon color="#f59e0b"><NotificationsOutline /></n-icon>
+                        <span>动态通知</span>
+                        <n-tag v-if="unreadCount > 0" type="error" size="tiny" round :bordered="false" class="badge-count">{{ unreadCount }}</n-tag>
+                    </div>
+                </template>
+                <template #header-extra>
+                   <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <n-button text @click="handleReadAll" style="font-size: 18px; margin: 16px 20px 0 0">
+                           <n-icon><CheckmarkDoneOutline /></n-icon>
+                        </n-button>
+                      </template>
+                      全部标记为已读
+                   </n-tooltip>
+                </template>
+
+                <div class="notif-scroll-area">
+                    <div v-if="notifications.length > 0" class="notif-list">
+                        <div 
+                          v-for="n in notifications" :key="n.id" 
+                          class="notif-card" 
+                          :class="{ 'unread': !n.is_read }"
+                          @click="handleNotifClick(n)"
+                        >
+                            <div v-if="!n.is_read" class="unread-dot"></div>
+                            
+                            <n-avatar round size="small" :src="getAvatar(n.sender?.avatar)" fallback-src="https://img.icons8.com/clouds/100/000000/user.png" />
+                            <div class="notif-content">
+                                <div class="notif-title-row">
+                                   <span class="notif-user">{{ n.sender?.nickname || n.sender?.username || '系统通知' }}</span>
+                                   <span class="notif-time">{{ new Date(n.created_at).toLocaleDateString() }}</span>
+                                </div>
+                                <p class="notif-text">{{ n.content }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <n-empty v-else description="暂无新动态" size="small" style="padding: 40px 0;" />
+                </div>
+            </n-card>
+
+            <n-card class="data-card side-widget animate-in" style="animation-delay: 0.4s">
+                <template #header>
+                    <div class="card-header-with-icon">
+                        <n-icon color="#d03050"><TrophyOutline /></n-icon>
+                        <span>今日卷王榜</span>
+                    </div>
+                </template>
+                <template #header-extra>
+                    <n-button text type="primary" size="tiny" @click="openRankModal">全部 ></n-button>
+                </template>
+                <div class="compact-rank">
+                    <div v-for="(u, i) in stats.rank_list" :key="i" class="mini-rank-row">
+                        <span class="rank-idx" :class="{'top-3': i < 3}">{{ i+1 }}</span>
+                        <n-avatar round :size="24" :src="getAvatar(u.avatar)" />
+                        <span class="rank-name">{{ u.nickname || u.username }}</span>
+                        <span class="rank-val">{{ u.count }} <small>题</small></span>
+                    </div>
+                    <n-empty v-if="stats.rank_list.length === 0" description="虚位以待" size="small" />
+                </div>
+            </n-card>
+        </div>
+    </div>
+
+    <n-modal v-model:show="showRankModal" preset="card" title="今日卷王总榜 🏆" style="width: 500px; border-radius: 20px;" :segmented="{ content: true }">
+        <div class="full-rank-list" @scroll="handleRankScroll">
+            <div v-for="user in rankListFull" :key="user.user_id" class="full-rank-row">
+                <div class="fr-idx">#{{ user.rank }}</div>
+                <n-avatar round :size="40" :src="getAvatar(user.avatar)" />
+                <div class="fr-info">
+                    <span class="fr-name">{{ user.nickname || user.username }}</span>
+                    <span class="fr-school" v-if="user.school">{{ user.school }}</span>
+                </div>
+                <div class="fr-score">今日 <strong>{{ user.count }}</strong> 题</div>
+            </div>
+            <div class="modal-footer">
+                <n-spin v-if="rankLoading" size="small" />
+                <span v-else-if="!rankHasMore" class="end-msg">仅展示前100名活跃学霸</span>
             </div>
         </div>
     </n-modal>
-
   </div>
 </template>
 
 <style scoped>
-/* VARIABLE DEFINITIONS */
-.dashboard-container { 
-    --primary: #2080f0;
-    --text-main: #334155;
-    --text-sub: #64748b;
-    --radius-box: 16px;
-    --radius-item: 12px;
-    width: 100%; 
-    box-sizing: border-box; 
-    margin: 0 auto; 
-    padding: 24px 24px 40px 24px; 
-}
+.db-container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; box-sizing: border-box; }
 
-@keyframes slideInUp {
-    from { opacity: 0; transform: translateY(20px); }
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(24px); }
     to { opacity: 1; transform: translateY(0); }
 }
-.animate-enter {
-    animation: slideInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
+.animate-in { animation: fadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards; }
 
-/* 1. Welcome Banner */
-.welcome-banner {
+/* 欢迎横幅 */
+.welcome-hero { 
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 28px; padding: 40px;
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;
+    box-shadow: 0 4px 20px -6px rgba(0,0,0,0.02);
+}
+.hero-left { display: flex; align-items: center; gap: 32px; }
+.avatar-ring { border: 4px solid #f1f5f9; border-radius: 50%; padding: 2px; }
+.welcome-title { margin: 0; font-size: 32px; font-weight: 900; color: #0f172a; letter-spacing: -0.04em; }
+.welcome-subtitle { margin: 8px 0 16px 0; color: #64748b; font-size: 16px; }
+.stat-pill { background: #fffbeb; border: 1px solid #fef3c7; color: #d97706; padding: 6px 16px; border-radius: 100px; display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 14px; }
+
+.hero-stats { display: flex; align-items: center; gap: 48px; }
+.hero-stat-item { display: flex; flex-direction: column; align-items: flex-end; }
+.hero-stat-item .label { font-size: 12px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; }
+.hero-stat-item .value { font-size: 32px; font-weight: 900; color: #1e293b; font-family: 'JetBrains Mono', monospace; }
+.hero-stat-item .value small { font-size: 14px; margin-left: 2px; opacity: 0.4; }
+.stat-v-line { width: 1px; height: 40px; background: #e2e8f0; }
+
+.dashboard-grid { display: grid; grid-template-columns: 1fr 340px; gap: 32px; }
+.main-column, .side-column { display: flex; flex-direction: column; gap: 32px; }
+
+/* 快捷入口区块 */
+.action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.action-tile { 
+    background: #fff; border: 1px solid #f1f5f9; border-radius: 24px; padding: 28px;
+    cursor: pointer; display: flex; align-items: center; gap: 20px; position: relative;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.action-tile:hover { transform: translateY(-8px); box-shadow: 0 12px 30px -10px rgba(0,0,0,0.06); }
+.icon-wrap { width: 56px; height: 56px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff; }
+.tile-content h3 { margin: 0; font-size: 18px; font-weight: 800; color: #1e293b; }
+.tile-content p { margin: 4px 0 0 0; font-size: 13px; color: #94a3b8; }
+.arrow-hint { position: absolute; right: 24px; opacity: 0; transition: 0.3s; color: #cbd5e1; }
+.action-tile:hover .arrow-hint { opacity: 1; transform: translateX(4px); }
+
+.t-blue .icon-wrap { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.t-red .icon-wrap { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.t-amber .icon-wrap { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.t-indigo .icon-wrap { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+
+/* 通用卡片样式 */
+.data-card { border-radius: 24px; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+.card-header-with-icon { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 16px; color: #334155; }
+
+/* 热力图 */
+.heatmap-container { padding: 12px 0; }
+.heatmap-flex { display: flex; justify-content: space-between; align-items: flex-end; height: 140px; }
+.heat-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.heat-track { width: 12px; height: 100px; background: #f8fafc; border-radius: 100px; position: relative; display: flex; align-items: flex-end; overflow: hidden; }
+.heat-fill { width: 100%; border-radius: 100px; transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+.lvl-0 { background: #f1f5f9; } .lvl-1 { background: #bfdbfe; } .lvl-2 { background: #60a5fa; } .lvl-3 { background: #2563eb; }
+.heat-label { font-size: 11px; font-weight: 800; color: #cbd5e1; font-family: monospace; }
+
+/* 🌟 优化后的通知中心列表 */
+.notif-scroll-area { max-height: 400px; overflow-y: auto; padding: 12px; }
+.notif-list { display: flex; flex-direction: column; gap: 8px; }
+
+.notif-card {
     position: relative;
-    border-radius: var(--radius-box);
-    background: linear-gradient(120deg, #eff6ff 0%, #f8fafc 100%); 
-    box-shadow: 0 4px 15px rgba(32, 128, 240, 0.08); 
-    overflow: hidden;
-    margin-bottom: 24px;
-    border: 1px solid #eef2f6;
-}
-.banner-glass {
-    padding: 30px;
+    padding: 14px;
+    border-radius: 16px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 24px;
-}
-.user-welcome {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-}
-.avatar-ring {
-    position: relative;
-    padding: 4px;
-    background: #fff;
-    border-radius: 50%;
-    box-shadow: 0 4px 15px rgba(32, 128, 240, 0.15);
-}
-.status-badge {
-    position: absolute;
-    bottom: 5px;
-    right: 5px;
-    width: 14px;
-    height: 14px;
-    background: #2080f0; 
-    border: 2px solid #fff;
-    border-radius: 50%;
-}
-.greet-title {
-    margin: 0;
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--text-main);
-    letter-spacing: -0.02em;
-}
-.greet-sub {
-    margin: 8px 0 0 0;
-    font-size: 15px;
-    color: var(--text-sub);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.icon-flame { color: #f0a020; font-size: 18px; } 
-.highlight { color: #2080f0; font-weight: 800; }
-
-/* Stats in Banner */
-.header-stats {
-    display: flex;
-    align-items: center;
-    background: rgba(255,255,255,0.8);
-    padding: 16px 24px;
-    border-radius: var(--radius-box);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.02);
-    border: 1px solid #f1f5f9;
-}
-.stat-item { display: flex; align-items: center; gap: 14px; min-width: 120px; }
-.stat-icon-wrapper {
-    width: 44px; height: 44px;
-    border-radius: var(--radius-item);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; color: #fff;
-    box-shadow: 0 4px 10px rgba(32, 128, 240, 0.2);
-}
-.blue-grad { background: linear-gradient(135deg, #4299e1, #2b6cb0); }
-
-.stat-meta .label { font-size: 12px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 2px; }
-.stat-meta .value { font-size: 20px; font-weight: 900; color: #1e293b; line-height: 1; font-feature-settings: "tnum"; }
-.stat-meta .unit { font-size: 12px; font-weight: 700; margin-left: 2px; color: var(--text-sub); }
-.stat-divider { width: 1px; height: 36px; background: #e2e8f0; margin: 0 16px; }
-
-/* 2. Main Grid Layout */
-.main-grid {
-    display: grid;
-    grid-template-columns: 1fr 360px; 
-    gap: 24px;
-    align-items: start;
-}
-.main-column { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.side-column { display: flex; flex-direction: column; gap: 24px; }
-
-/* 3. Panel Cards */
-.panel-card {
-    border-radius: var(--radius-box);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-    transition: all 0.3s ease;
-    border: 1px solid #f1f5f9;
-    overflow: hidden;
-    background: #fff;
-}
-.panel-card:hover { box-shadow: 0 8px 24px rgba(32, 128, 240, 0.08); transform: translateY(-2px); }
-
-.card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #f8fafc; }
-.title-with-icon { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; color: var(--text-main); }
-.icon-box { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #fff; }
-.themed-box { background: var(--primary); box-shadow: 0 4px 10px rgba(32, 128, 240, 0.25); }
-
-/* 4. Quick Actions Grid */
-.grid-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 16px;
-}
-.action-card {
-    position: relative;
-    padding: 24px;
-    border-radius: var(--radius-box);
+    gap: 12px;
     cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.notif-card:hover { background: #f8fafc; transform: translateX(4px); }
+
+/* 未读状态专属高亮样式 */
+.notif-card.unread { background: #f0f7ff; border-color: #e0efff; }
+
+/* 左上角未读红点指示器 */
+.unread-dot {
+    position: absolute;
+    top: 14px;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    background: #ef4444;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px #fff;
+}
+
+.notif-content { flex: 1; min-width: 0; }
+.notif-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.notif-user { font-size: 13px; font-weight: 800; color: #1e293b; }
+.notif-time { font-size: 11px; color: #94a3b8; }
+.notif-text { 
+    margin: 0; 
+    font-size: 13px; 
+    color: #64748b; 
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: #fff;
-    border: 2px solid transparent;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-}
-.action-card:hover { transform: translateY(-4px); border-color: #bfdbfe; box-shadow: 0 8px 20px rgba(32, 128, 240, 0.1); }
-
-.ac-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
-.ac-icon {
-    width: 48px; height: 48px; border-radius: var(--radius-item); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #fff;
-    box-shadow: 0 4px 12px rgba(32, 128, 240, 0.15);
-}
-.bg-blue-1 { background: #3b82f6; } 
-.bg-blue-2 { background: #2563eb; } 
-.bg-blue-3 { background: #1d4ed8; } 
-.bg-blue-4 { background: #1e40af; } 
-
-.ac-info h3 { margin: 0; font-size: 16px; font-weight: 700; color: #1e293b; }
-.ac-info p { margin: 4px 0 0 0; font-size: 12px; color: #64748b; }
-
-.ac-bg-shape {
-    position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.05; transition: transform 0.5s;
-}
-.bg-soft-blue { background: #2080f0; }
-.action-card:hover .ac-bg-shape { transform: scale(1.5); opacity: 0.1; }
-
-/* 5. Heatmap */
-.heatmap-container { padding: 10px 0; overflow: hidden; }
-.heatmap-scroll { 
-    display: flex; gap: 6px; align-items: flex-end; justify-content: space-between; 
-    height: 140px; 
-    padding-bottom: 10px;
-    overflow-x: auto; 
-    scrollbar-width: thin; 
-}
-.heat-col { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; min-width: 24px; cursor: pointer; height: 100%; justify-content: flex-end; }
-.heat-track { width: 100%; height: 100%; background: #f8fafc; border-radius: 8px; position: relative; display: flex; align-items: flex-end; overflow: hidden; }
-.heat-fill { width: 100%; border-radius: 6px; transition: height 0.6s ease; }
-.level-0 { background: #e2e8f0; } 
-.level-1 { background: #bfdbfe; } 
-.level-2 { background: #60a5fa; } 
-.level-3 { background: #3b82f6; } 
-.level-4 { background: #2563eb; }
-.heat-label { font-size: 10px; color: #94a3b8; font-family: monospace; }
-.heat-col:hover .heat-fill { background: #1d4ed8; }
-
-/* 6. Subject Analysis */
-.custom-collapse :deep(.n-collapse-item__header) { padding: 16px 24px !important; transition: background 0.2s; }
-.custom-collapse :deep(.n-collapse-item__header:hover) { background: #f8fafc; }
-.collapse-trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 12px; }
-.trigger-title { font-weight: 700; color: #334155; }
-.trigger-meta { display: flex; align-items: center; gap: 12px; }
-.count-badge { font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
-.mini-progress { width: 40px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
-.mp-bar { height: 100%; border-radius: 2px; }
-.acc-val { font-size: 13px; font-weight: 700; width: 36px; text-align: right; color: var(--text-main); }
-
-.sub-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 20px 24px; background: #fafafa; }
-.chapter-tile { background: #fff; border: 1px solid #f1f5f9; padding: 12px; border-radius: var(--radius-item); box-shadow: 0 1px 2px rgba(0,0,0,0.02); }
-.tile-head { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; font-weight: 600; color: #475569; }
-.chap-t { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-foot { font-size: 10px; color: #cbd5e1; margin-top: 6px; text-align: right; }
-
-/* 7. Rank Panel */
-.rank-list { display: flex; flex-direction: column; }
-.rank-item { display: flex; align-items: center; padding: 12px 24px; border-bottom: 1px solid #f1f5f9; transition: background 0.2s; }
-.rank-item:last-child { border-bottom: none; }
-.rank-item:hover { background: #fdfcff; }
-.rank-pos { width: 30px; font-size: 18px; text-align: center; font-weight: 800; color: #cbd5e1; display: flex; justify-content: center; }
-.rank-num { font-size: 14px; color: #94a3b8; }
-.rank-avi { margin: 0 12px; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-.rank-details { flex: 1; overflow: hidden; }
-.rd-name { font-size: 14px; font-weight: 600; color: #334155; }
-.rd-score { font-size: 12px; color: var(--primary); font-weight: bold; }
-.rank-footer { text-align: center; padding: 12px; font-size: 11px; color: #cbd5e1; border-top: 1px solid #f8fafc; background: #fafafa; }
-
-/* 8. Quote Card */
-.daily-quote-card {
-    background: #1e293b; 
-    color: #fff;
-    padding: 24px;
-    border-radius: var(--radius-box);
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(30, 41, 59, 0.2);
-}
-.quote-icon { font-size: 32px; margin-bottom: 12px; color: #3b82f6; opacity: 1; }
-.quote-content p { margin: 0; font-size: 14px; line-height: 1.6; font-style: italic; color: #e2e8f0; position: relative; z-index: 10; }
-
-/* 9. Full Rank Modal Styles */
-.full-rank-container {
-    height: 60vh;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-.rank-row {
-    display: flex;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid #f1f5f9;
-}
-.rank-idx { width: 40px; font-size: 18px; font-weight: 800; text-align: center; margin-right: 12px; }
-.rank-idx .num { color: #94a3b8; font-size: 16px; }
-.rank-info { flex: 1; display: flex; align-items: center; gap: 12px; }
-.info-text { display: flex; flex-direction: column; gap: 2px; }
-.name-row { display: flex; align-items: center; gap: 8px; }
-.name { font-weight: 700; font-size: 14px; color: #334155; }
-.school-tag { background: #eff6ff; color: #3b82f6; transform: scale(0.9); transform-origin: left center; }
-.score { font-size: 12px; color: #64748b; }
-.loading-state { text-align: center; padding: 20px; font-size: 12px; color: #94a3b8; }
-
-/* 10. Responsive Adjustments */
-@media (max-width: 900px) {
-    .main-grid { grid-template-columns: 1fr; gap: 20px; }
-    .side-column { order: 2; }
 }
 
-@media (max-width: 650px) {
-    .dashboard-container { padding: 0 0 40px 0; }
-    .banner-glass { flex-direction: column; align-items: stretch; padding: 20px 16px; gap: 16px; }
-    .user-welcome { width: 100%; justify-content: flex-start; flex-direction: row; align-items: center; }
-    .user-avatar { width: 48px !important; height: 48px !important; font-size: 18px !important; }
-    .avatar-ring { padding: 3px; }
-    .greet-title { font-size: 20px; }
-    .greet-sub { font-size: 13px; }
-    .header-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr 1fr; padding: 12px 8px; gap: 4px; background: rgba(255,255,255,0.6); }
-    .stat-item { flex-direction: column; align-items: center; text-align: center; min-width: auto; gap: 4px; }
-    .stat-divider { display: none; }
-    .stat-icon-wrapper { width: 32px; height: 32px; font-size: 16px; margin-bottom: 2px; }
-    .stat-meta .label { font-size: 9px; transform: scale(0.9); }
-    .stat-meta .value { font-size: 16px; font-weight: 800; }
-    .grid-actions { grid-template-columns: 1fr 1fr; gap: 12px; }
-    .action-card { padding: 16px; }
-    .ac-icon { width: 40px; height: 40px; font-size: 20px; }
-    .ac-info h3 { font-size: 14px; }
-    .ac-info p { font-size: 11px; }
-    .custom-collapse :deep(.n-collapse-item__header) { padding: 12px 16px !important; }
-    .sub-detail-grid { padding: 12px; gap: 10px; grid-template-columns: repeat(2, 1fr); } 
-    .heatmap-scroll { height: 75px; }
-    .heat-tooltip { display: none; }
-    .card-header { padding: 12px 16px; }
-}
+.badge-count { margin-left: auto; background: #ef4444; font-weight: 900; }
 
-@media (max-width: 380px) {
-    .sub-detail-grid { grid-template-columns: 1fr; }
-    .header-stats { gap: 2px; }
+/* 卷王榜与全量榜单 */
+.compact-rank { display: flex; flex-direction: column; gap: 10px; }
+.mini-rank-row { display: flex; align-items: center; gap: 14px; font-size: 14px; padding: 4px 0; }
+.rank-idx { width: 20px; font-weight: 900; color: #cbd5e1; font-style: italic; }
+.rank-idx.top-3 { color: #3b82f6; }
+.rank-name { flex: 1; font-weight: 700; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank-val { font-weight: 800; color: #1e293b; font-family: monospace; white-space: nowrap; }
+
+.full-rank-list { max-height: 500px; overflow-y: auto; padding-right: 8px; }
+.full-rank-row { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
+.fr-idx { width: 30px; font-weight: 900; color: #cbd5e1; font-size: 16px; }
+.fr-info { flex: 1; display: flex; flex-direction: column; }
+.fr-name { font-weight: 800; font-size: 15px; color: #1e293b; }
+.fr-school { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.fr-score { font-size: 13px; color: #64748b; }
+.fr-score strong { color: #2563eb; font-size: 18px; margin: 0 4px; }
+.modal-footer { padding-top: 20px; text-align: center; }
+.end-msg { font-size: 12px; color: #cbd5e1; }
+
+@media (max-width: 1000px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .welcome-hero { flex-direction: column; gap: 32px; text-align: center; }
+    .hero-left { flex-direction: column; }
+    .hero-stats { width: 100%; justify-content: space-around; }
+}
+@media (max-width: 600px) {
+    .action-grid { grid-template-columns: 1fr; }
+    .hero-stat-item .value { font-size: 26px; }
+    .welcome-title { font-size: 26px; }
 }
 </style>

@@ -1,13 +1,16 @@
 package product
 
 import (
+	"errors"
 	"fmt"
 	"med-platform/internal/common/db"
 	"strconv"
 	"time"
-
+	"med-platform/internal/common/uploader"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"strings"
+	"gorm.io/gorm/clause"
 )
 
 type Handler struct {
@@ -18,202 +21,282 @@ func NewHandler() *Handler {
 	return &Handler{repo: NewRepository()}
 }
 
-// --- 1. 商品管理 (Product + SKU) ---
+// ==========================================
+// 🛒 1. 商品基础管理 (增改查)
+// ==========================================
 
-// CreateProduct 创建商品壳子及规格
-// 支持一次性创建 Product 和多个 Skus
+// CreateProduct 创建商品 (🔥 增加图片转正逻辑)
 func (h *Handler) CreateProduct(c *gin.Context) {
-	// 定义请求结构体
 	type SkuReq struct {
-		Name         string  `json:"name"`          // 规格名
-		Price        float64 `json:"price"`         // 价格
-		DurationDays int     `json:"duration_days"` // 时长
+		Name         string `json:"name" binding:"required"`
+		Points       int    `json:"points"`
+		DurationDays int    `json:"duration_days" binding:"required"`
 	}
 	var req struct {
-		Name        string   `json:"name"`
+		Name        string   `json:"name" binding:"required"`
 		Description string   `json:"description"`
-		Skus        []SkuReq `json:"skus"` // 允许同时传 SKU 列表
+		CoverImg    string   `json:"cover_img"` // 这里接收的是 /uploads/temp/...
+		Category    string   `json:"category"`
+		Tags        string   `json:"tags"`
+		Detail      string   `json:"detail"`
+		Skus        []SkuReq `json:"skus"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
+		c.JSON(400, gin.H{"error": "参数错误"})
 		return
 	}
 
-	// 构建模型
+	// 🔥🔥🔥 核心逻辑：图片转正
+	// 如果路径中包含 temp，说明是刚上传的，将其移动到 products 目录
+	if req.CoverImg != "" && strings.Contains(req.CoverImg, "/uploads/temp/") {
+		finalPaths := uploader.ConfirmImages([]string{req.CoverImg}, "products")
+		if len(finalPaths) > 0 {
+			req.CoverImg = finalPaths[0] // 更新为永久路径：/uploads/products/...
+		}
+	}
+
 	p := Product{
 		Name:        req.Name,
 		Description: req.Description,
+		CoverImg:    req.CoverImg,
+		Category:    req.Category,
+		Tags:        req.Tags,
+		Detail:      req.Detail,
 		IsOnShelf:   true,
-		Skus:        []ProductSku{}, // 初始化
 	}
 
-	// 填充 SKUs
 	for _, s := range req.Skus {
-		p.Skus = append(p.Skus, ProductSku{
-			Name:         s.Name,
-			Price:        s.Price,
-			DurationDays: s.DurationDays,
-		})
+		p.Skus = append(p.Skus, ProductSku{Name: s.Name, Points: s.Points, DurationDays: s.DurationDays})
 	}
 
-	// 事务创建
 	if err := db.DB.Create(&p).Error; err != nil {
-		c.JSON(500, gin.H{"error": "创建失败: " + err.Error()})
+		c.JSON(500, gin.H{"error": "创建失败"})
 		return
 	}
-
 	c.JSON(200, gin.H{"message": "商品创建成功", "data": p})
 }
 
-// UpdateProduct 更新商品 (支持修改 SKU 规格)
+// UpdateProduct 更新商品 (🔥 同样增加图片转正逻辑)
 func (h *Handler) UpdateProduct(c *gin.Context) {
 	id := c.Param("id")
-
-	// 定义请求结构
-	type SkuReq struct {
-		ID           uint    `json:"id"`            // 如果有ID，说明是更新；没有则是新增
-		Name         string  `json:"name"`
-		Price        float64 `json:"price"`
-		DurationDays int     `json:"duration_days"`
-	}
 	var req struct {
-		Name        string   `json:"name"`
-		Description string   `json:"description"`
-		IsOnShelf   *bool    `json:"is_on_shelf"`
-		Skus        []SkuReq `json:"skus"` // 接收 SKU 列表
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		CoverImg    string `json:"cover_img"`
+		Category    string `json:"category"`
+		Tags        string `json:"tags"`
+		Detail      string `json:"detail"`
+		IsOnShelf   bool   `json:"is_on_shelf"`
 	}
-
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 开启事务处理 (保证原子性)
-	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		var p Product
-		if err := tx.First(&p, id).Error; err != nil {
-			return err
+	// 🔥🔥🔥 核心逻辑：图片转正
+	if req.CoverImg != "" && strings.Contains(req.CoverImg, "/uploads/temp/") {
+		finalPaths := uploader.ConfirmImages([]string{req.CoverImg}, "products")
+		if len(finalPaths) > 0 {
+			req.CoverImg = finalPaths[0]
 		}
-
-		// 1. 更新商品基础信息
-		if req.Name != "" {
-			p.Name = req.Name
-		}
-		if req.Description != "" {
-			p.Description = req.Description
-		}
-		// 上下架控制
-		if req.IsOnShelf != nil {
-			p.IsOnShelf = *req.IsOnShelf
-		}
-		if err := tx.Save(&p).Error; err != nil {
-			return err
-		}
-
-		// 2. 🔥🔥🔥 核心：处理 SKU 规格的增删改 🔥🔥🔥
-
-		// 步骤 A: 找出前端这次提交的所有 SKU ID (用于判断哪些要保留)
-		keepIds := []uint{}
-		for _, s := range req.Skus {
-			if s.ID > 0 {
-				keepIds = append(keepIds, s.ID)
-			}
-		}
-
-		// 步骤 B: 删除那些“数据库里有，但前端没传”的 SKU (说明用户删掉了)
-		if len(keepIds) > 0 {
-			// 删除不在 keepIds 里的
-			if err := tx.Where("product_id = ? AND id NOT IN ?", p.ID, keepIds).Delete(&ProductSku{}).Error; err != nil {
-				return err
-			}
-		} else {
-			// 如果前端一个旧ID都没传（keepIds为空），说明全删了或者全是新增
-			// 安全起见，删除该商品下所有旧 SKU
-			if err := tx.Where("product_id = ?", p.ID).Delete(&ProductSku{}).Error; err != nil {
-				return err
-			}
-		}
-
-		// 步骤 C: 循环处理 新增 或 更新
-		for _, s := range req.Skus {
-			if s.ID > 0 {
-				// === 更新 (Update) ===
-				// 只更新 Price, Name, DurationDays
-				if err := tx.Model(&ProductSku{}).Where("id = ? AND product_id = ?", s.ID, p.ID).
-					Updates(map[string]interface{}{
-						"name":          s.Name,
-						"price":         s.Price,
-						"duration_days": s.DurationDays,
-					}).Error; err != nil {
-					return err
-				}
-			} else {
-				// === 新增 (Create) ===
-				newSku := ProductSku{
-					ProductID:    p.ID,
-					Name:         s.Name,
-					Price:        s.Price,
-					DurationDays: s.DurationDays,
-				}
-				if err := tx.Create(&newSku).Error; err != nil {
-					return err
-				}
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(500, gin.H{"error": "更新失败: " + err.Error()})
-		return
 	}
 
+	if err := db.DB.Model(&Product{}).Where("id = ?", id).Updates(req).Error; err != nil {
+		c.JSON(500, gin.H{"error": "更新失败"})
+		return
+	}
 	c.JSON(200, gin.H{"message": "更新成功"})
 }
 
-// 管理员：ListProducts 查看所有商品 (包含 SKU 信息)
+// ListProducts 获取商品列表 (🔥 核心优化：分页、分类筛选、排除大文本 Detail 提升性能)
 func (h *Handler) ListProducts(c *gin.Context) {
-	var list []Product
-	// 🔥 Preload("Skus") 关键：把关联的规格也查出来
-	db.DB.Preload("Skus").Find(&list)
-	c.JSON(200, gin.H{"data": list})
-}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	category := c.Query("category")
+	adminView := c.Query("admin") == "1" // 管理员视角看全部
 
-// ListMarketProducts 前台商城专用列表 (只返回上架商品)
-func (h *Handler) ListMarketProducts(c *gin.Context) {
-	var list []Product
-	// 🔥 核心区别：后端强制过滤，只查 IsOnShelf = true 的数据
-	// Preload("Skus") 依然需要，因为前端要展示价格
-	result := db.DB.Preload("Skus").Where("is_on_shelf = ?", true).Find(&list)
+	query := db.DB.Model(&Product{}).Preload("Skus").Order("id desc")
 	
-	if result.Error != nil {
-		c.JSON(500, gin.H{"error": "获取商品列表失败"})
-		return
+	// 只有非管理员视角才只看上架的商品
+	if !adminView {
+		query = query.Where("is_on_shelf = ?", true)
+	}
+	if category != "" {
+		query = query.Where("category = ?", category)
 	}
 
-	c.JSON(200, gin.H{"data": list})
+	var total int64
+	query.Count(&total)
+
+	var list []Product
+	// ⚠️ Omit("Detail")：在列表页坚决不查详情文本，极大降低网络带宽占用
+	query.Omit("Detail").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list)
+
+	c.JSON(200, gin.H{"data": list, "total": total, "page": page})
 }
 
-// DeleteProduct 删除商品 (级联删除所有绑定、SKU 和 用户持有)
+// ListMarketProducts 供前端调用的市场列表
+func (h *Handler) ListMarketProducts(c *gin.Context) {
+	c.Request.URL.RawQuery = c.Request.URL.RawQuery + "&admin=0" // 强制非管理员视角
+	h.ListProducts(c)
+}
+
+// GetProductDetail 获取商品详情 (🔥 新增接口，前端点进商品页时调用)
+func (h *Handler) GetProductDetail(c *gin.Context) {
+	id := c.Param("id")
+	var p Product
+	if err := db.DB.Preload("Skus").First(&p, id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "未找到该商品"})
+		return
+	}
+	c.JSON(200, gin.H{"data": p})
+}
+
+// DeleteProduct 删除商品
 func (h *Handler) DeleteProduct(c *gin.Context) {
-	idStr := c.Param("id")
-	idInt, _ := strconv.Atoi(idStr)
-	id := uint(idInt)
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := h.repo.DeleteProduct(uint(id)); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "删除成功"})
+}
 
-	// 调用 Repo 的混合删除逻辑
-	if err := h.repo.DeleteProduct(id); err != nil {
-		c.JSON(500, gin.H{"error": "删除失败：" + err.Error()})
+
+// ==========================================
+// 🛡️ 2. 核心兑换逻辑 (高并发安全)
+// ==========================================
+
+// ExchangeProduct 积分兑换商品 (🔥🔥🔥 封堵各种羊毛漏洞)
+func (h *Handler) ExchangeProduct(c *gin.Context) {
+	userID := c.MustGet("userID").(uint)
+	var req struct {
+		SkuID uint `json:"sku_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "商品已下架：规格已清空，内容绑定已清除，用户记录已归档"})
+	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		var sku ProductSku
+		if err := tx.First(&sku, req.SkuID).Error; err != nil {
+			return errors.New("商品规格不存在")
+		}
+
+		// 🚨 安全拦截 1：防负数越权
+		if sku.Points < 0 {
+			return errors.New("非法规格：积分异常")
+		}
+
+		var prod Product
+		if err := tx.First(&prod, sku.ProductID).Error; err != nil {
+			return errors.New("商品数据异常")
+		}
+		if !prod.IsOnShelf {
+			return errors.New("该商品已下架")
+		}
+
+		// 🚨 安全拦截 2：防 0 元购的无限刷单
+		if sku.Points == 0 {
+			var count int64
+			tx.Model(&ExchangeRecord{}).Where("user_id = ? AND sku_id = ?", userID, sku.ID).Count(&count)
+			if count > 0 {
+				return errors.New("限时免费商品每人仅限兑换一次哦！")
+			}
+		}
+
+		// 查询用户现有凭证
+		var existingUserProd UserProduct
+		err := tx.Where("user_id = ? AND product_id = ?", userID, prod.ID).
+			Order("expire_at desc").
+			First(&existingUserProd).Error
+		hasExisting := err == nil
+
+		// 🚨 安全拦截 3：防终身会员的重复购买叠加
+		if hasExisting && existingUserProd.ExpireAt.Year() >= 2099 {
+			return errors.New("您已永久解锁该商品，无需重复兑换！")
+		}
+
+		// 锁住用户积分（防高并发双花）
+		type Buyer struct {
+			ID     uint
+			Points int
+		}
+		var u Buyer
+		if err := tx.Table("users").Clauses(clause.Locking{Strength: "UPDATE"}).First(&u, userID).Error; err != nil {
+			return err
+		}
+
+		if u.Points < sku.Points {
+			return fmt.Errorf("积分不足，需要 %d，当前仅有 %d", sku.Points, u.Points)
+		}
+
+		// 扣除积分
+		if err := tx.Table("users").Where("id = ?", userID).Update("points", u.Points-sku.Points).Error; err != nil {
+			return err
+		}
+
+		// 发放权益
+		if !hasExisting {
+			// 首次购买
+			newExpire := time.Now().AddDate(0, 0, sku.DurationDays)
+			if sku.DurationDays == -1 {
+				newExpire = time.Date(2099, 12, 31, 23, 59, 59, 0, time.Local)
+			}
+			newUp := UserProduct{
+				UserID:      userID,
+				ProductID:   prod.ID,
+				ProductName: prod.Name,
+				ExpireAt:    newExpire,
+			}
+			if err := tx.Create(&newUp).Error; err != nil {
+				return err
+			}
+		} else {
+			// 续费逻辑
+			var newExpireAt time.Time
+			if sku.DurationDays == -1 {
+				newExpireAt = time.Date(2099, 12, 31, 23, 59, 59, 0, time.Local)
+			} else {
+				if existingUserProd.ExpireAt.After(time.Now()) {
+					// 还没过期，在原来的基础上加
+					newExpireAt = existingUserProd.ExpireAt.AddDate(0, 0, sku.DurationDays)
+				} else {
+					// 已经过期，从今天开始重新算
+					newExpireAt = time.Now().AddDate(0, 0, sku.DurationDays)
+				}
+			}
+			if err := tx.Model(&existingUserProd).Update("expire_at", newExpireAt).Error; err != nil {
+				return err
+			}
+		}
+
+		// 记录兑换流水
+		exchangeLog := ExchangeRecord{
+			UserID:      userID,
+			ProductID:   prod.ID,
+			SkuID:       sku.ID,
+			ProductName: prod.Name,
+			SkuName:     sku.Name,
+			PointsPaid:  sku.Points,
+		}
+		return tx.Create(&exchangeLog).Error
+	})
+
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "兑换成功，快去学习吧！"})
 }
 
-// --- 2. 内容绑定管理 (Binding) ---
 
-// BindContent 往商品里装题库科目
+// ==========================================
+// 🔗 3. 内容绑定与授权分配 (后台功能)
+// ==========================================
+
 func (h *Handler) BindContent(c *gin.Context) {
 	var req struct {
 		ProductID uint   `json:"product_id"`
@@ -224,21 +307,20 @@ func (h *Handler) BindContent(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-
-	// 查重
 	var count int64
-	db.DB.Model(&ProductContent{}).Where("product_id = ? AND source = ? AND category = ?", req.ProductID, req.Source, req.Category).Count(&count)
-	if count > 0 {
-		c.JSON(200, gin.H{"message": "已存在，无需重复添加"})
+	db.DB.Model(&Product{}).Where("id = ?", req.ProductID).Count(&count)
+	if count == 0 {
+		c.JSON(404, gin.H{"error": "商品不存在"})
 		return
 	}
-
-	pc := ProductContent{ProductID: req.ProductID, Source: req.Source, Category: req.Category}
-	db.DB.Create(&pc)
+	err := db.DB.Create(&ProductContent{ProductID: req.ProductID, Source: req.Source, Category: req.Category}).Error
+	if err != nil {
+		c.JSON(500, gin.H{"error": "绑定失败"})
+		return
+	}
 	c.JSON(200, gin.H{"message": "绑定成功"})
 }
 
-// UnbindContent 解绑
 func (h *Handler) UnbindContent(c *gin.Context) {
 	var req struct {
 		ProductID uint   `json:"product_id"`
@@ -249,219 +331,153 @@ func (h *Handler) UnbindContent(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-
 	db.DB.Unscoped().Where("product_id = ? AND source = ? AND category = ?", req.ProductID, req.Source, req.Category).Delete(&ProductContent{})
 	c.JSON(200, gin.H{"message": "解绑成功"})
 }
 
-// GetProductContents 查看某个商品里装了啥
 func (h *Handler) GetProductContents(c *gin.Context) {
-	pid := c.Param("id")
+	id := c.Param("id")
 	var list []ProductContent
-	db.DB.Where("product_id = ?", pid).Find(&list)
+	if err := db.DB.Where("product_id = ?", id).Find(&list).Error; err != nil {
+		c.JSON(500, gin.H{"error": "查询失败"})
+		return
+	}
 	c.JSON(200, gin.H{"data": list})
 }
 
-// --- 3. 用户授权管理 (Granting) + 审计日志 ---
-
-// 辅助：获取用户名
-func getUserName(uid uint) string {
-	var user struct{ Username string }
-	if err := db.DB.Table("users").Select("username").Where("id = ?", uid).First(&user).Error; err != nil {
-		return "未知用户"
-	}
-	return user.Username
-}
-
-// GrantProductToUser 给用户发证 (核心接口 - 带审计)
 func (h *Handler) GrantProductToUser(c *gin.Context) {
 	var req struct {
-		UserID       uint `json:"user_id"`
-		ProductID    uint `json:"product_id"`
-		DurationDays int  `json:"duration_days"` // 授权几天 (支持 -1 永久)
+		UserID       uint   `json:"user_id"`
+		ProductID    uint   `json:"product_id"`
+		DurationDays int    `json:"duration_days"`
+		Reason       string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 1. 获取操作员信息
-	opID := c.GetUint("userID")
-	opName := c.GetString("username")
-	if opName == "" {
-		opName = "System/Unknown"
-	}
+	opID := c.MustGet("userID").(uint)
+	opName := c.MustGet("username").(string)
 
-	// 2. 查商品 (快照用)
-	var product Product
-	if err := db.DB.First(&product, req.ProductID).Error; err != nil {
-		c.JSON(404, gin.H{"error": "商品不存在"})
-		return
-	}
-
-	// 3. 查目标客户用户名 (快照用)
-	targetUserName := getUserName(req.UserID)
-
-	// 4. 开启事务
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		var up UserProduct
-		// 查找现有记录
-		res := tx.Where("user_id = ? AND product_id = ?", req.UserID, req.ProductID).Order("expire_at desc").First(&up)
+		var prod Product
+		if err := tx.First(&prod, req.ProductID).Error; err != nil {
+			return fmt.Errorf("商品不存在")
+		}
 
-		now := time.Now()
+		var targetUserName string
+		if err := tx.Table("users").Select("username").Where("id = ?", req.UserID).Scan(&targetUserName).Error; err != nil {
+			return fmt.Errorf("用户不存在")
+		}
+
 		var newExpire time.Time
-
-		// 处理永久授权 (-1)
 		if req.DurationDays == -1 {
 			newExpire = time.Date(2099, 12, 31, 23, 59, 59, 0, time.Local)
 		} else {
-			newExpire = now.AddDate(0, 0, req.DurationDays)
+			var exist UserProduct
+			err := tx.Where("user_id = ? AND product_id = ?", req.UserID, req.ProductID).
+				Order("expire_at desc").First(&exist).Error
+			
+			if err == nil && exist.ExpireAt.After(time.Now()) {
+				newExpire = exist.ExpireAt.AddDate(0, 0, req.DurationDays)
+			} else {
+				newExpire = time.Now().AddDate(0, 0, req.DurationDays)
+			}
 		}
 
-		// A. 执行授权逻辑
-		if res.Error == nil {
-			// 续期逻辑
-			if req.DurationDays == -1 {
-				// 如果改为永久，直接覆盖
-				up.ExpireAt = newExpire
-			} else {
-				// 普通时长叠加
-				if up.ExpireAt.After(now) {
-					// 还没过期：顺延
-					up.ExpireAt = up.ExpireAt.AddDate(0, 0, req.DurationDays)
-				} else {
-					// 已过期：重新计算
-					up.ExpireAt = newExpire
-				}
-			}
-
-			up.ProductName = product.Name // 更新快照
+		var up UserProduct
+		if err := tx.Where("user_id = ? AND product_id = ?", req.UserID, req.ProductID).First(&up).Error; err == nil {
+			up.ExpireAt = newExpire
+			up.ProductName = prod.Name 
 			if err := tx.Save(&up).Error; err != nil {
 				return err
 			}
 		} else {
-			// 新增
-			up = UserProduct{
-				UserID:      req.UserID,
-				ProductID:   req.ProductID,
-				ExpireAt:    newExpire,
-				ProductName: product.Name, // 📸 写入快照
-			}
+			up = UserProduct{UserID: req.UserID, ProductID: req.ProductID, ProductName: prod.Name, ExpireAt: newExpire}
 			if err := tx.Create(&up).Error; err != nil {
 				return err
 			}
 		}
 
-		// B. 写入审计日志 (GRANT)
 		log := ProductAuthLog{
-			OperatorID:     opID,
-			OperatorName:   opName,
-			TargetUserID:   req.UserID,
-			TargetUserName: targetUserName,
-			Action:         "GRANT",
-			ProductID:      req.ProductID,
-			ProductName:    product.Name,
-			DurationDays:   req.DurationDays,
-			ExpireAt:       up.ExpireAt, // 记录最终的过期时间
+			OperatorID: opID, OperatorName: opName, TargetUserID: req.UserID, TargetUserName: targetUserName,
+			Action: "GRANT", ProductID: req.ProductID, ProductName: prod.Name, DurationDays: req.DurationDays, ExpireAt: newExpire, Memo: req.Reason,
 		}
-		if err := tx.Create(&log).Error; err != nil {
-			return err
-		}
-
-		return nil
+		return tx.Create(&log).Error
 	})
 
 	if err != nil {
-		c.JSON(500, gin.H{"error": "授权失败：" + err.Error()})
+		c.JSON(500, gin.H{"error": "授权失败: " + err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"message": fmt.Sprintf("已授权商品：%s", product.Name)})
+	c.JSON(200, gin.H{"message": "后台授权成功"})
 }
 
-// RevokeUserProduct 收回凭证
 func (h *Handler) RevokeUserProduct(c *gin.Context) {
 	var req struct {
-		UserID    uint `json:"user_id"`
-		ProductID uint `json:"product_id"`
+		UserID    uint   `json:"user_id"`
+		ProductID uint   `json:"product_id"`
+		Reason    string `json:"reason"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-
-	opID := c.GetUint("userID")
-	opName := c.GetString("username")
-	if opName == "" {
-		opName = "System/Unknown"
-	}
-
-	var up UserProduct
-	if err := db.DB.Where("user_id = ? AND product_id = ?", req.UserID, req.ProductID).First(&up).Error; err != nil {
-		c.JSON(404, gin.H{"error": "用户未持有该商品或已失效"})
-		return
-	}
-	targetUserName := getUserName(req.UserID)
+	opID := c.MustGet("userID").(uint)
+	opName := c.MustGet("username").(string)
 
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
-		// 硬删除凭证
+		var up UserProduct
+		if err := tx.Where("user_id = ? AND product_id = ?", req.UserID, req.ProductID).First(&up).Error; err != nil {
+			return fmt.Errorf("用户未持有该商品")
+		}
+		var targetUserName string
+		tx.Table("users").Select("username").Where("id = ?", req.UserID).Scan(&targetUserName)
+
 		if err := tx.Unscoped().Delete(&up).Error; err != nil {
 			return err
 		}
-
-		// 写入日志
 		log := ProductAuthLog{
-			OperatorID:     opID,
-			OperatorName:   opName,
-			TargetUserID:   req.UserID,
-			TargetUserName: targetUserName,
-			Action:         "REVOKE",
-			ProductID:      req.ProductID,
-			ProductName:    up.ProductName,
-			DurationDays:   0,
-			ExpireAt:       up.ExpireAt,
+			OperatorID: opID, OperatorName: opName, TargetUserID: req.UserID, TargetUserName: targetUserName,
+			Action: "REVOKE", ProductID: req.ProductID, ProductName: up.ProductName, DurationDays: 0, ExpireAt: time.Now(), Memo: req.Reason,
 		}
-		if err := tx.Create(&log).Error; err != nil {
-			return err
-		}
-		return nil
+		return tx.Create(&log).Error
 	})
-
 	if err != nil {
-		c.JSON(500, gin.H{"error": "收回失败：" + err.Error()})
+		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"message": "已收回权限"})
+	c.JSON(200, gin.H{"message": "已成功收回用户权限"})
 }
 
-// GetUserProducts 查看用户有哪些证
 func (h *Handler) GetUserProducts(c *gin.Context) {
 	uid := c.Param("id")
 	var list []UserProduct
-	// Preload Product 只是为了兜底
 	db.DB.Preload("Product").Where("user_id = ? AND expire_at > ?", uid, time.Now()).Find(&list)
 	c.JSON(200, gin.H{"data": list})
 }
 
-// GetAuthLogs 查询审计日志
 func (h *Handler) GetAuthLogs(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	operatorId := c.Query("operator_id")
-	targetId := c.Query("target_id")
-
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	targetUserID := c.Query("user_id")
 	var logs []ProductAuthLog
 	var total int64
-
 	query := db.DB.Model(&ProductAuthLog{})
-	if operatorId != "" {
-		query = query.Where("operator_id = ?", operatorId)
-	}
-	if targetId != "" {
-		query = query.Where("target_user_id = ?", targetId)
-	}
-
+	if targetUserID != "" { query = query.Where("target_user_id = ?", targetUserID) }
 	query.Count(&total)
-	query.Order("created_at desc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&logs)
-
+	query.Order("id desc").Limit(pageSize).Offset((page - 1) * pageSize).Find(&logs)
 	c.JSON(200, gin.H{"data": logs, "total": total})
+}
+
+// UploadCover 处理商品封面上传 (初始保存在 temp)
+func (h *Handler) UploadCover(c *gin.Context) {
+	// 默认 SaveImageWithHash 会存入 /uploads/temp
+	url, err := uploader.SaveImageWithHash(c, "file", 5*1024*1024)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"url": url})
 }

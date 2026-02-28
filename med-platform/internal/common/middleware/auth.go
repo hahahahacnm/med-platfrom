@@ -3,10 +3,10 @@ package middleware
 import (
 	"med-platform/internal/common/db"
 	"med-platform/internal/common/jwt"
-	"med-platform/internal/user" // 引入 user 包以访问 User 模型
+	"med-platform/internal/user" 
 	"net/http"
 	"strings"
-	"time" // 👈 必须引入 time 包用于比对封禁时间
+	"time" 
 
 	"github.com/gin-gonic/gin"
 )
@@ -48,7 +48,7 @@ func AuthJWT() gin.HandlerFunc {
 			return
 		}
 
-		// 🔥🔥🔥 5. 核心升级：查库校验用户状态 (封号拦截) 🔥🔥🔥
+		// 5. 查库校验用户状态 (封号拦截)
 		var currentUser user.User
 		if err := db.DB.First(&currentUser, uid).Error; err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "用户不存在"})
@@ -57,48 +57,64 @@ func AuthJWT() gin.HandlerFunc {
 
 		// 6. 检查是否被封禁 (Status = 2)
 		if currentUser.Status == 2 {
-			// 如果有封禁截止时间，且当前时间还没到解封时间
 			if currentUser.BanUntil != nil && time.Now().Before(*currentUser.BanUntil) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":  "账号已被封禁",
 					"reason": "违反平台规定",
-					"until":  currentUser.BanUntil.Format("2006-01-02 15:04:05"), // 告诉用户什么时候解封
+					"until":  currentUser.BanUntil.Format("2006-01-02 15:04:05"),
 				})
 				return
 			}
-			// 如果时间已过，原则上可以放行（或者你可以在这里写逻辑自动把 status 改回 1）
 		}
 
-		// 7. 将关键信息存入上下文，供后续使用
+		// 7. 将关键信息存入上下文
 		c.Set("userID", currentUser.ID)
-		c.Set("role", currentUser.Role) // 🔥 把角色存进去，AdminRequired 直接用，不用再查库了
+		c.Set("role", currentUser.Role) 
 		c.Set("username", currentUser.Username)
 
 		c.Next()
 	}
 }
 
-// 🔥🔥🔥 管理员权限验证中间件 (优化版) 🔥🔥🔥
-// 必须在 AuthJWT 之后使用
-func AdminRequired() gin.HandlerFunc {
+// ---------------------------------------------------------
+// 🔥 权限中间件升级区
+// ---------------------------------------------------------
+
+// RequireSuperAdmin 严格模式：仅限超级管理员 (Role = "admin")
+// 用于：封号、修改题库、删库跑路级别操作
+func RequireSuperAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 直接从上下文获取 Role (AuthJWT 已经查过库了，这里直接用，性能更高)
+		role, exists := c.Get("role")
+		if !exists || role != "admin" {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "权限不足：仅限超级管理员操作"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireStaff 宽松模式：内部工作人员 (Role = "admin" OR "agent")
+// 用于：商品授权、查看日志、社区删帖、查看反馈
+func RequireStaff() gin.HandlerFunc {
+	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
 			return
 		}
-
+		
 		roleStr := role.(string)
-
-		// 2. 权限判断
-		// 允许 'admin'(超管) 和 'agent'(机构代理) 进入后台
-		// 如果你只想让 admin 进，就去掉 agent
+		// 允许 admin 和 agent
 		if roleStr != "admin" && roleStr != "agent" {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "权限不足：非管理员账号"})
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "权限不足：仅限内部人员操作"})
 			return
 		}
-
 		c.Next()
 	}
+}
+
+// 兼容旧代码的别名 (如果不想改 router 里的名字，可以留着这个，指向 RequireStaff)
+// 但建议我们在下一步直接替换 router 里的调用
+func AdminRequired() gin.HandlerFunc {
+    return RequireStaff() 
 }

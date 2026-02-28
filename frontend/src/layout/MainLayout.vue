@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, ref, computed } from 'vue'
+import { h, ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { 
@@ -14,9 +14,10 @@ import {
   CloseOutline,
   CheckmarkCircle,
   LibraryOutline,
-  CartOutline // 🛒 引入购物车图标
+  CartOutline,
+  ChatboxEllipsesOutline
 } from '@vicons/ionicons5'
-import { NIcon, NAvatar, NDrawer, NDrawerContent } from 'naive-ui' // 移除了 NBadge
+import { NIcon, NAvatar, NDrawer, NDrawerContent } from 'naive-ui'
 
 const router = useRouter()
 const route = useRoute()
@@ -28,15 +29,31 @@ const userAvatar = computed(() => {
   return undefined
 })
 
-const menuItems = computed(() => [
-  { label: '总览', key: 'Home', icon: HomeOutline, path: '/' },
-  { label: '题库', key: 'QuizBank', icon: LibraryOutline, path: '/quiz' },
-  { label: '错题集', key: 'Mistakes', icon: BookOutline, path: '/mistakes' },
-  { label: '收藏夹', key: 'Favorites', icon: StarOutline, path: '/favorites' },
-  { label: '笔记本', key: 'MyNotes', icon: JournalOutline, path: '/my-notes' },
+// 🔥 菜单配置
+const menuItems = computed(() => {
+  // 基础菜单
+  const items = [
+    { label: '总览', key: 'Home', icon: HomeOutline, path: '/' },
+    { label: '题库', key: 'QuizBank', icon: LibraryOutline, path: '/quiz' },
+    { label: '错题集', key: 'Mistakes', icon: BookOutline, path: '/mistakes' },
+    { label: '收藏夹', key: 'Favorites', icon: StarOutline, path: '/favorites' },
+    { label: '笔记本', key: 'MyNotes', icon: JournalOutline, path: '/my-notes' },
     { label: '订阅商城', key: 'PaymentTest', icon: CartOutline, path: '/payment-test' }, 
-  ...(userStore.role === 'admin' ? [{ label: '管理员后台', key: 'Admin', icon: SettingsOutline, path: '/admin' }] : [])
-])
+    { label: '社区交流', key: 'ForumHome', icon: ChatboxEllipsesOutline, path: '/forum' },
+  ]
+
+  // 🔥🔥🔥 核心修复：管理员 AND 代理商 都可以看到后台入口 🔥🔥🔥
+  if (['admin', 'agent'].includes(userStore.role)) {
+    items.push({ 
+      label: '系统管理', // 改个通用的名字
+      key: 'Admin', 
+      icon: SettingsOutline, 
+      path: '/admin' 
+    })
+  }
+
+  return items
+})
 
 const handleNavigate = (path: string) => {
   router.push(path)
@@ -47,6 +64,13 @@ const handleLogout = () => {
   userStore.logout()
   router.push('/login')
 }
+
+// 🛡️ 每次加载布局时，静默刷新一次用户信息（防缓存过期）
+onMounted(() => {
+    if (userStore.token) {
+        userStore.fetchProfile()
+    }
+})
 </script>
 
 <template>
@@ -64,7 +88,7 @@ const handleLogout = () => {
           v-for="item in menuItems" 
           :key="item.key"
           class="nav-item"
-          :class="{ active: route.name === item.key || route.path === item.path }"
+          :class="{ active: route.name === item.key || route.path.startsWith(item.path) && item.path !== '/' }"
           @click="handleNavigate(item.path)"
         >
           <n-icon size="20" class="nav-icon"><component :is="item.icon" /></n-icon>
@@ -78,7 +102,9 @@ const handleLogout = () => {
         </div>
         <div class="user-info">
           <div class="user-name">{{ userStore.username || '同学' }}</div>
-          <div class="user-role">{{ userStore.role === 'admin' ? '管理员' : '普通用户' }}</div>
+          <div class="user-role">
+            {{ userStore.role === 'admin' ? '管理员' : (userStore.role === 'agent' ? '授权代理' : '普通用户') }}
+          </div>
         </div>
       </div>
     </aside>
@@ -102,7 +128,7 @@ const handleLogout = () => {
             v-for="item in menuItems" 
             :key="item.key"
             class="nav-item mobile-item"
-            :class="{ active: route.name === item.key || route.path === item.path }"
+            :class="{ active: route.name === item.key || route.path.startsWith(item.path) && item.path !== '/' }"
             @click="handleNavigate(item.path)"
           >
             <n-icon size="20" class="nav-icon"><component :is="item.icon" /></n-icon>
@@ -144,116 +170,176 @@ const handleLogout = () => {
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background-color: #f8fafc; /* slate-50 */
+  background-color: #f8fafc;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* Sidebar Styles */
 .sidebar {
   background-color: #fff;
-  border-right: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  z-index: 20;
+  z-index: 100;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
 }
 
 .desktop-sidebar {
-  width: 250px;
+  width: 68px; /* Collapsed width */
   position: fixed;
   top: 0;
   bottom: 0;
   left: 0;
 }
 
+.desktop-sidebar:hover {
+  width: 210px;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.08);
+  z-index: 1010;           /* ← 新增：展开时盖住 top-nav 左侧，避免穿模 */
+}
+
 .logo-area {
-  padding: 24px;
+  padding: 20px 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 0;
   border-bottom: 1px solid #f1f5f9;
+  height: 73px;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .logo-icon {
-  background-color: #2563eb; /* blue-600 */
-  width: 36px;
-  height: 36px;
+    min-width: 68px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.logo-icon .n-icon {
+  background-color: #2563eb;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: #fff;
 }
 
 .logo-text {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 18px;
+  font-weight: 500;
   color: #2563eb;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.desktop-sidebar:hover .logo-text {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 .nav-menu {
   flex: 1;
-  padding: 16px;
+  padding: 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
+  gap: 0;
+  padding: 8px 0;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  color: #64748b; /* slate-500 */
+  color: #64748b;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
-  background-color: #f1f5f9; /* slate-100 */
-  color: #0f172a; /* slate-900 */
+  background-color: #f1f5f9;
+  color: #0f172a;
 }
 
 .nav-item.active {
-  background-color: #2563eb;
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.nav-icon {
+  min-width: 52px; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-label {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 400;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+}
+
+.desktop-sidebar:hover .nav-label {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .user-profile-area {
-  padding: 16px;
-  margin: 16px;
+  padding: 12px 0;
+  margin: 12px 8px;
   border-top: 1px solid #f1f5f9;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0;
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: 8px;
   transition: background-color 0.2s;
+  overflow: hidden;
 }
 
 .user-profile-area:hover {
   background-color: #f8fafc;
 }
 
+.avatar-wrapper {
+  min-width: 52px;
+  display: flex;
+  justify-content: center;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.desktop-sidebar:hover .user-info {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .user-name {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 500;
   color: #0f172a;
-  white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .user-role {
@@ -325,15 +411,35 @@ const handleLogout = () => {
     margin: 0 0 12px 0;
     border: 1px solid #f1f5f9;
     background: #f8fafc;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.mobile-profile-card .user-info {
+    opacity: 1 !important;
+    transform: none !important;
+    gap: 4px;
+}
+.mobile-profile-card .avatar-wrapper {
+    min-width: auto;
 }
 
 .mobile-item {
   padding: 12px;
+  gap: 12px;
+}
+.mobile-item .nav-label {
+    opacity: 1 !important;
+    transform: none !important;
+}
+.mobile-item .nav-icon {
+    min-width: auto;
 }
 
 .logout-item {
   margin-top: 20px;
-  color: #ef4444; /* red-500 */
+  color: #ef4444;
 }
 .logout-item:hover {
   background-color: #fef2f2;
@@ -342,13 +448,14 @@ const handleLogout = () => {
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: 250px;
-  width: calc(100% - 250px);
-  padding: 0; /* Removed default padding for edge-to-edge design */
+  margin-left: 68px; 
+  width: calc(100% - 68px);
+  padding: 0; 
   height: 100vh;
   overflow-y: auto; 
   position: relative;
   box-sizing: border-box;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 :global(body) {
@@ -368,7 +475,7 @@ const handleLogout = () => {
   .main-content {
     margin-left: 0;
     width: 100%;
-    padding: 80px 16px 24px 16px; /* Reduced side padding from 24px to 16px */
+    padding: 80px 16px 24px 16px; 
   }
 }
 

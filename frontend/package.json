@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
+    "@wangeditor/editor": "^5.1.23",
+    "@wangeditor/editor-for-vue": "^5.1.12",
     "axios": "^1.13.2",
+    "go-captcha-vue": "^2.0.6",
+    "md-editor-v3": "^6.3.1",
     "naive-ui": "^2.43.2",
     "pinia": "^3.0.4",
     "vfonts": "^0.0.3",
