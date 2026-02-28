@@ -1,0 +1,43 @@
+name: Go Build and Commit
+
+on:
+  push:
+    paths-ignore:
+      - 'file/**'
+
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24' # 匹配您 go.mod 中的版本
+
+      - name: Build for Linux Amd64
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o med-platform-linux-amd64 ./cmd/api/main.go
+
+      - name: Commit and push changes
+        run: |
+          mkdir -p file
+          mv med-platform-linux-amd64 file/
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add file/med-platform-linux-amd64
+          # 检查是否有文件变更，避免在没有任何变化时提交报错
+          if git diff --staged --quiet; then
+            echo "没有发现变更，跳过提交"
+          else
+            git commit -m "chore: 自动化编译 Linux Amd64 版本"
+            git push
+          fi
