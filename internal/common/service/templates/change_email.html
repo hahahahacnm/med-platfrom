@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>邮箱换绑确认 🔐</title>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; background: #fdfcfb; margin: 0; padding: 40px 15px; color: #444; line-height: 1.6; }
+    .email-container { 
+        max-width: 550px; margin: auto; background: white; border-radius: 20px; padding: 40px; 
+        box-shadow: 0 10px 30px rgba(0,0,0,0.06); position: relative; overflow: hidden; 
+        /* 🔥 右上角动态头像 */
+        background: white url('https://q1.qlogo.cn/g?b=qq&nk=2219911811&s=640') top 24px right 24px no-repeat;
+        background-size: 64px;
+    }
+    .email-container::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 6px; background: linear-gradient(to right, #3b82f6, #60a5fa); }
+    .header { font-size: 26px; font-weight: bold; color: #2D3748; margin-bottom: 24px; display: flex; align-items: center; padding-right: 70px; }
+    .header::before { content: "🔐"; margin-right: 12px; font-size: 28px; }
+    .content p { margin: 18px 0; font-size: 16px; color: #4A5568; }
+    .btn-wrapper { text-align: center; margin: 32px 0; }
+    .btn { 
+        display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); 
+        color: white !important; padding: 14px 35px; border-radius: 12px; text-decoration: none; 
+        font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3); 
+    }
+    .link-box { background: #f8fafc; border-radius: 12px; padding: 15px; font-size: 13px; color: #718096; word-break: break-all; border: 1px solid #edf2f7; margin-top: 20px; }
+    .footer { margin-top: 40px; font-size: 13px; color: #A0AEC0; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+    .paw-icon { position: absolute; bottom: -10px; right: -5px; font-size: 80px; opacity: 0.05; transform: rotate(-15deg); color: #3b82f6; }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="header">邮箱换绑确认请求</div>
+    <div class="content">
+      <p>尊敬的 <strong>{{.Username}}</strong>，您好！🐾</p>
+      <p>我们收到了您更换绑定邮箱的申请。如果您确认要将当前账号绑定到此新邮箱，请点击下方按钮：</p>
+      <div class="btn-wrapper">
+        <a href="{{.MagicLink}}" class="btn">确认绑定新邮箱 🐾</a>
+      </div>
+      <p style="font-size: 14px; color: #718096;">此操作涉及账号安全，请务必确认本人操作。链接有效期为 30 分钟：</p>
+      <div class="link-box">{{.MagicLink}}</div>
+    </div>
+    <div class="footer">
+      由 <strong>{{.SenderName}}</strong> 安全系统发送<br/>
+      如非本人操作，请忽略，您的账号依然安全。🐾
+    </div>
+    <div class="paw-icon">🐾</div>
+  </div>
+</body>
+</html>
